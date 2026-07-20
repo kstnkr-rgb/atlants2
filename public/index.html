@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Атланты — арбитр дуэли</title>
+<style>
+  :root {
+    --bg: #0d1b24; --panel: #14293a; --panel2: #1b3448; --line: #2a4a63;
+    --ink: #e8f0f5; --dim: #8fa8b8; --accent: #35b8a5; --gold: #d9a441;
+    --hp: #e0645a; --block: #5b9bd5; --attack: #c75048; --defend: #4a7fb5; --magic: #8a63c0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh; min-height: 100dvh;
+  }
+  .screen { display: none; max-width: 520px; margin: 0 auto; padding: 16px; }
+  .screen.active { display: block; }
+
+  /* Лобби */
+  .lobby-title { text-align: center; margin: 40px 0 6px; font-size: 30px; letter-spacing: 0.06em; }
+  .lobby-sub { text-align: center; color: var(--dim); margin-bottom: 36px; font-size: 14px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 14px; font-size: 18px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  input#join-code { text-transform: uppercase; letter-spacing: 0.3em; text-align: center; font-size: 24px; }
+  .btn {
+    display: block; width: 100%; padding: 15px; margin-top: 10px; font-size: 17px; font-weight: 600;
+    border: none; border-radius: 10px; background: var(--accent); color: #06231e; cursor: pointer;
+  }
+  .btn.secondary { background: var(--panel2); color: var(--ink); border: 1px solid var(--line); }
+  .btn:disabled { opacity: 0.5; }
+  .divider { text-align: center; color: var(--dim); margin: 22px 0 8px; font-size: 13px; }
+  .error { color: #ff9d94; text-align: center; margin-top: 12px; min-height: 20px; font-size: 14px; }
+
+  /* Ожидание */
+  .wait-code {
+    text-align: center; font-size: 52px; letter-spacing: 0.25em; margin: 30px 0 8px;
+    color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .wait-hint { text-align: center; color: var(--dim); font-size: 14px; }
+  .pulse { text-align: center; margin-top: 30px; color: var(--accent); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  /* Бой */
+  .fighter {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 8px;
+  }
+  .fighter.me { border-color: var(--accent); }
+  .f-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .f-name { font-weight: 600; font-size: 15px; }
+  .turn-tag { font-size: 12px; color: var(--gold); }
+  .hpbar { background: #0a141b; border-radius: 6px; height: 18px; margin: 6px 0 4px; position: relative; overflow: hidden; }
+  .hpbar .fill { background: var(--hp); height: 100%; border-radius: 6px; transition: width 0.3s; }
+  .hpbar .txt {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .stats { display: flex; gap: 10px; font-size: 13px; color: var(--dim); flex-wrap: wrap; }
+  .stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stat-block b { color: var(--block); }
+
+  .battle-log {
+    background: #0a141b; border-radius: 10px; padding: 8px 12px; font-size: 12.5px;
+    color: var(--dim); height: 92px; overflow-y: auto; margin: 8px 0; line-height: 1.5;
+  }
+  .energy-row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
+  .energy { font-size: 15px; }
+  .energy b { color: var(--gold); font-size: 20px; font-variant-numeric: tabular-nums; }
+  .btn-end {
+    padding: 10px 22px; font-size: 15px; font-weight: 600; border: none; border-radius: 10px;
+    background: var(--gold); color: #241a05; cursor: pointer;
+  }
+  .btn-end:disabled { opacity: 0.4; }
+
+  .hand { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 12px; }
+  .card {
+    flex: 0 0 118px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px; cursor: pointer; user-select: none; position: relative; min-height: 108px;
+  }
+  .card.unplayable { opacity: 0.45; }
+  .card .cost {
+    position: absolute; top: -7px; left: -7px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--gold); color: #241a05; font-weight: 700; display: flex;
+    align-items: center; justify-content: center; font-size: 14px;
+  }
+  .card .t { font-size: 13px; font-weight: 600; margin: 4px 0 6px; padding-left: 12px; }
+  .card .d { font-size: 11.5px; color: var(--dim); line-height: 1.35; }
+  .card .type-strip { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; border-radius: 0 0 10px 10px; }
+  .card.Attack .type-strip { background: var(--attack); }
+  .card.Defend .type-strip { background: var(--defend); }
+  .card.Magic .type-strip { background: var(--magic); }
+
+  .banner {
+    text-align: center; padding: 14px; border-radius: 12px; margin: 10px 0; font-size: 18px; font-weight: 700;
+  }
+  .banner.win { background: #14402e; color: #7fe0a8; }
+  .banner.lose { background: #47201c; color: #ff9d94; }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: #47201c; color: #ffb9b2; padding: 10px 20px; border-radius: 10px;
+    font-size: 14px; opacity: 0; transition: opacity 0.25s; pointer-events: none; max-width: 90%;
+  }
+  .toast.show { opacity: 1; }
+  .demo-note { text-align: center; font-size: 11px; color: var(--dim); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ЛОББИ -->
+<div class="screen active" id="scr-lobby">
+  <div class="lobby-title">⚔ АТЛАНТЫ</div>
+  <div class="lobby-sub">Арбитр дуэли · играйте физическими картами, счёт ведём мы</div>
+  <div class="field">
+    <label>Ваше имя</label>
+    <input id="player-name" maxlength="20" placeholder="Игрок">
+  </div>
+  <button class="btn" id="btn-create">Создать бой</button>
+  <div class="divider">— или подключиться к другу —</div>
+  <div class="field">
+    <input id="join-code" maxlength="4" placeholder="КОД">
+  </div>
+  <button class="btn secondary" id="btn-join">Войти по коду</button>
+  <div class="error" id="lobby-error"></div>
+  <div class="demo-note">демо-версия: колоды тестовые, реальные карты Атлантов подключим после выгрузки конфигов</div>
+</div>
+
+<!-- ОЖИДАНИЕ -->
+<div class="screen" id="scr-wait">
+  <div class="lobby-sub" style="margin:40px 0 0">Код вашего боя</div>
+  <div class="wait-code" id="wait-code">····</div>
+  <div class="wait-hint">Продиктуйте код противнику.<br>Он вводит его на своём телефоне в поле «Войти по коду».</div>
+  <div class="pulse">Ждём подключения противника…</div>
+</div>
+
+<!-- БОЙ -->
+<div class="screen" id="scr-battle">
+  <div class="fighter" id="opp-panel"></div>
+  <div class="battle-log" id="log"></div>
+  <div id="banner-slot"></div>
+  <div class="fighter me" id="me-panel"></div>
+  <div class="energy-row">
+    <div class="energy">Энергия: <b id="energy">0</b><span style="color:var(--dim)">/<span id="max-energy">3</span></span></div>
+    <button class="btn-end" id="btn-end">Конец хода</button>
+  </div>
+  <div class="hand" id="hand"></div>
+  <button class="btn" id="btn-rematch" style="display:none">Реванш</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let session = null; // {room, player, token}
+let lastV = -1;
+let polling = null;
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function api(path, body) {
+  const res = await fetch(path, body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : undefined);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Ошибка сети');
+  return data;
+}
+
+$('btn-create').onclick = async () => {
+  try {
+    $('btn-create').disabled = true;
+    session = await api('/api/room', { name: $('player-name').value || 'Игрок 1' });
+    localStorage.setItem('atl_session', JSON.stringify(session));
+    $('wait-code').textContent = session.room;
+    show('scr-wait');
+    startPolling();
+  } catch (e) { $('lobby-error').textContent = e.message; }
+  finally { $('btn-create').disabled = false; }
+};
+
+$('btn-join').onclick = async () => {
+  try {
+    $('btn-join').disabled = true;
+    const code = $('join-code').value.trim().toUpperCase();
+    if (code.length !== 4) throw new Error('Код — 4 символа');
+    session = await api('/api/join', { room: code, name: $('player-name').value || 'Игрок 2' });
+    localStorage.setItem('atl_session', JSON.stringify(session));
+    startPolling();
+  } catch (e) { $('lobby-error').textContent = e.message; }
+  finally { $('btn-join').disabled = false; }
+};
+
+function startPolling() {
+  if (polling) clearInterval(polling);
+  poll();
+  polling = setInterval(poll, 1200);
+}
+
+async function poll() {
+  if (!session) return;
+  try {
+    const s = await api(`/api/state?room=${session.room}&token=${session.token}`);
+    if (s.waiting) return; // ещё ждём второго
+    if (s.v !== lastV) { lastV = s.v; render(s); }
+    if (!$('scr-battle').classList.contains('active')) { show('scr-battle'); render(s); }
+  } catch (e) { /* сеть мигнула — следующий тик */ }
+}
+
+function fighterHtml(f, isMe, yourTurn) {
+  const hpPct = Math.max(0, Math.round(f.hp / f.maxHp * 100));
+  return `
+    <div class="f-top">
+      <span class="f-name">${isMe ? '🜃 ' : ''}${escapeHtml(f.name)}</span>
+      ${(isMe && yourTurn) ? '<span class="turn-tag">ваш ход</span>' : ''}
+      ${(!isMe && !yourTurn) ? '<span class="turn-tag">ходит…</span>' : ''}
+    </div>
+    <div class="hpbar"><div class="fill" style="width:${hpPct}%"></div>
+      <div class="txt">${Math.max(0, f.hp)} / ${f.maxHp}</div></div>
+    <div class="stats">
+      <span class="stat-block">🛡 <b>${f.block}</b></span>
+      <span>⚔ сила <b>${f.strength}</b></span>
+      <span>✦ ловк. <b>${f.agility}</b></span>
+      <span>🂠 ${isMe ? 'колода ' + f.drawCount : 'рука ' + f.handCount}</span>
+      <span>сброс ${f.discardCount}</span>
+    </div>`;
+}
+
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function render(s) {
+  $('opp-panel').innerHTML = fighterHtml(s.opponent, false, s.yourTurn);
+  $('me-panel').innerHTML = fighterHtml(s.me, true, s.yourTurn);
+  $('energy').textContent = s.me.energy;
+  $('max-energy').textContent = s.me.maxEnergy;
+  $('log').innerHTML = s.log.map(escapeHtml).join('<br>');
+  $('log').scrollTop = $('log').scrollHeight;
+  $('btn-end').disabled = !s.yourTurn;
+
+  const hand = $('hand');
+  hand.innerHTML = '';
+  for (const c of s.me.hand || []) {
+    const el = document.createElement('div');
+    const playable = s.yourTurn && c.cardEnergy <= s.me.energy;
+    el.className = `card ${c.cardType}${playable ? '' : ' unplayable'}`;
+    el.innerHTML = `<div class="cost">${c.cardEnergy}</div><div class="t">${escapeHtml(c.title)}</div>
+                    <div class="d">${escapeHtml(c.description)}</div><div class="type-strip"></div>`;
+    el.onclick = () => playCard(c.uid, playable);
+    hand.appendChild(el);
+  }
+
+  const slot = $('banner-slot');
+  if (s.winner !== null) {
+    const won = s.winner === s.you;
+    slot.innerHTML = `<div class="banner ${won ? 'win' : 'lose'}">${won ? '🏆 Победа!' : 'Поражение'}</div>`;
+    $('btn-rematch').style.display = 'block';
+  } else {
+    slot.innerHTML = '';
+    $('btn-rematch').style.display = 'none';
+  }
+}
+
+async function playCard(uid, playable) {
+  if (!playable) { toast('Не хватает энергии или сейчас не ваш ход'); return; }
+  try {
+    await api('/api/action', { room: session.room, token: session.token, action: { type: 'play', uid } });
+    poll();
+  } catch (e) { toast(e.message); }
+}
+
+$('btn-end').onclick = async () => {
+  try {
+    await api('/api/action', { room: session.room, token: session.token, action: { type: 'end' } });
+    poll();
+  } catch (e) { toast(e.message); }
+};
+
+$('btn-rematch').onclick = async () => {
+  try {
+    await api('/api/action', { room: session.room, token: session.token, action: { type: 'rematch' } });
+    lastV = -1; poll();
+  } catch (e) { toast(e.message); }
+};
+
+// восстановление сессии после перезагрузки страницы
+try {
+  const saved = JSON.parse(localStorage.getItem('atl_session'));
+  if (saved && saved.room) { session = saved; startPolling(); }
+} catch (e) {}
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "atlanteans-pvp-arbiter",
+  "version": "0.1.0",
+  "description": "Веб-арбитр PvP-дуэлей для физических карт «Атланты»",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-engine.js"
+  }
+}

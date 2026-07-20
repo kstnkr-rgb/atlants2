@@ -1,0 +1,40 @@
+{
+  "_comment": "ДЕМО-КОЛОДА. Структура полей повторяет CardGamePlayData из Unity-клиента (cardID, title, cardType, description, cardEnergy, cardEffects). Когда добудем реальные конфиги cardsAttack/cardsDefend/cardsMagic из Unity Remote Config — этот файл заменяется на них без изменения кода.",
+  "cards": [
+    { "cardID": "demo_attack1", "title": "Удар трезубцем", "cardType": "Attack", "description": "Нанести 6 урона", "cardEnergy": 1,
+      "cardEffects": [ { "targetType": "ChosenTarget", "effectType": "Damage", "effectValue": 6, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_attack2", "title": "Волна", "cardType": "Attack", "description": "Нанести 9 урона", "cardEnergy": 2,
+      "cardEffects": [ { "targetType": "ChosenTarget", "effectType": "Damage", "effectValue": 9, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_attack3", "title": "Двойной всплеск", "cardType": "Attack", "description": "Нанести 3 урона дважды", "cardEnergy": 1,
+      "cardEffects": [ { "targetType": "ChosenTarget", "effectType": "Damage", "effectValue": 3, "effectValueSign": "Add" },
+                       { "targetType": "ChosenTarget", "effectType": "Damage", "effectValue": 3, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_attack4", "title": "Таран левиафана", "cardType": "Attack", "description": "Нанести 14 урона. Изгнание", "cardEnergy": 3,
+      "cardEffects": [ { "targetType": "ChosenTarget", "effectType": "Damage", "effectValue": 14, "effectValueSign": "Add" },
+                       { "targetType": "Itself", "effectType": "Disappear", "effectValue": 0, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_defend1", "title": "Коралловый щит", "cardType": "Defend", "description": "Получить 5 блока", "cardEnergy": 1,
+      "cardEffects": [ { "targetType": "Caster", "effectType": "Block", "effectValue": 5, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_defend2", "title": "Стена воды", "cardType": "Defend", "description": "Получить 9 блока", "cardEnergy": 2,
+      "cardEffects": [ { "targetType": "Caster", "effectType": "Block", "effectValue": 9, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_defend3", "title": "Панцирь", "cardType": "Defend", "description": "6 блока и +1 ловкость", "cardEnergy": 2,
+      "cardEffects": [ { "targetType": "Caster", "effectType": "Block", "effectValue": 6, "effectValueSign": "Add" },
+                       { "targetType": "Caster", "effectType": "Dexterity", "effectValue": 1, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_magic1", "title": "Гнев глубин", "cardType": "Magic", "description": "+2 силы до конца боя", "cardEnergy": 2,
+      "cardEffects": [ { "targetType": "Caster", "effectType": "Strength", "effectValue": 2, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_magic2", "title": "Течение", "cardType": "Magic", "description": "Взять 2 карты", "cardEnergy": 1,
+      "cardEffects": [ { "targetType": "Hand", "effectType": "DrawCard", "effectValue": 2, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_magic3", "title": "Жемчужина жизни", "cardType": "Magic", "description": "Восстановить 6 HP", "cardEnergy": 1,
+      "cardEffects": [ { "targetType": "Caster", "effectType": "Hp", "effectValue": 6, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_magic4", "title": "Прилив сил", "cardType": "Magic", "description": "+2 энергии. Изгнание", "cardEnergy": 0,
+      "cardEffects": [ { "targetType": "Caster", "effectType": "Energy", "effectValue": 2, "effectValueSign": "Add" },
+                       { "targetType": "Itself", "effectType": "Disappear", "effectValue": 0, "effectValueSign": "Add" } ] },
+    { "cardID": "demo_magic5", "title": "Шторм", "cardType": "Magic", "description": "8 урона и 4 блока", "cardEnergy": 3,
+      "cardEffects": [ { "targetType": "ChosenTarget", "effectType": "Damage", "effectValue": 8, "effectValueSign": "Add" },
+                       { "targetType": "Caster", "effectType": "Block", "effectValue": 4, "effectValueSign": "Add" } ] }
+  ],
+  "starterDeck": [
+    "demo_attack1", "demo_attack1", "demo_attack1", "demo_attack2", "demo_attack2",
+    "demo_attack3", "demo_attack3", "demo_attack4",
+    "demo_defend1", "demo_defend1", "demo_defend1", "demo_defend2", "demo_defend2", "demo_defend3",
+    "demo_magic1", "demo_magic2", "demo_magic2", "demo_magic3", "demo_magic4", "demo_magic5"
+  ]
+}
