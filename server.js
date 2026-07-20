@@ -11,7 +11,14 @@ const { createBattle, applyAction, viewFor } = require('./engine');
 const PORT = process.env.PORT || 3000;
 const cardsData = JSON.parse(fs.readFileSync(path.join(__dirname, 'cards.json'), 'utf8'));
 const cardById = Object.fromEntries(cardsData.cards.map(c => [c.cardID, c]));
-const starterDeck = cardsData.starterDeck.map(id => cardById[id]);
+
+// Эмуляция колод: каждому игроку на бой собирается случайная колода из пула карт.
+// Когда появятся реальные конфиги и правила сбора колоды — заменить эту функцию.
+const DECK_SIZE = 20;
+function buildRandomDeck() {
+  const pool = cardsData.cards;
+  return Array.from({ length: DECK_SIZE }, () => pool[Math.floor(Math.random() * pool.length)]);
+}
 
 const rooms = new Map(); // code -> {state, tokens:[t0,t1], names:[..], createdAt, touchedAt}
 const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
@@ -76,7 +83,7 @@ const server = http.createServer(async (req, res) => {
       const token = crypto.randomBytes(12).toString('hex');
       room.tokens[1] = token;
       room.names[1] = String(name || 'Игрок 2').slice(0, 20);
-      room.state = createBattle(room.names[0], room.names[1], starterDeck, starterDeck);
+      room.state = createBattle(room.names[0], room.names[1], buildRandomDeck(), buildRandomDeck());
       room.touchedAt = Date.now();
       return json(res, 200, { room: String(code).toUpperCase(), player: 1, token });
     }
@@ -101,7 +108,7 @@ const server = http.createServer(async (req, res) => {
       room.touchedAt = Date.now();
       if (action && action.type === 'rematch') {
         if (room.state.winner === null) return json(res, 400, { error: 'Бой ещё идёт' });
-        room.state = createBattle(room.names[0], room.names[1], starterDeck, starterDeck);
+        room.state = createBattle(room.names[0], room.names[1], buildRandomDeck(), buildRandomDeck());
         return json(res, 200, { ok: true });
       }
       const result = applyAction(room.state, idx, action || {});
