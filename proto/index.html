@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Атланты — прототип дуэли</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html, body { width:100%; height:100%; background:#0a0d10; overflow:hidden;
+    font-family:"Segoe UI", system-ui, sans-serif; }
+
+  /* Сцена ровно в размерах фрейма Figma — масштабируется целиком,
+     поэтому пропорции всей графики сохраняются один в один. */
+  #stage { position:absolute; width:2597.4px; height:1568.8px;
+    transform-origin:0 0; overflow:hidden; }
+  #stage img, #stage svg { position:absolute; display:block; pointer-events:none; }
+  .lay { position:absolute; }
+
+  /* --fx: -1 отражает персонажа (у Афины слой зеркальный, как в Figma) */
+  .char { transform:scaleX(var(--fx,1)); }
+
+  .name { position:absolute; font-size:42.75px; color:#fff; letter-spacing:1px; font-weight:600;
+    text-shadow:0 3px 6px rgba(0,0,0,.85); white-space:nowrap; }
+  .val { position:absolute; color:#fff; text-shadow:0 2px 4px rgba(0,0,0,.85);
+    display:flex; align-items:center; justify-content:center; font-weight:700; }
+
+  .hpwrap { position:absolute; width:667px; height:53px; }
+  .hpempty { position:absolute; inset:0; background:rgba(0,0,0,.5); border-radius:8px; }
+  .hpclip { position:absolute; top:0; bottom:0; left:0; overflow:hidden; transition:width .35s ease; }
+  .hpclip.right { left:auto; right:0; }
+  .hpclip img { top:0; }
+  .hptext { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:36px; font-weight:700; color:#fff; text-shadow:0 2px 5px rgba(0,0,0,.95); }
+
+  .pip { position:absolute; width:79.8px; height:36.7px; background:#43BEF3;
+    box-shadow:0 2px 5px rgba(0,0,0,.5); transition:background .2s; }
+  .pip.off { background:#16323f; }
+
+  /* карта: графика 335x477 нативная, меняются кайма и текст */
+  .card { position:absolute; width:335px; height:477px; }
+  .card .art { position:absolute; left:0; top:0; width:335px; height:477px; border-radius:18px; }
+  .card .edge { position:absolute; left:0; top:0; width:335px; height:477px;
+    border:9px solid #C74B41; border-radius:18px; }
+  .card .cost { position:absolute; left:20px; top:2px; width:44px; height:80px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:42.75px; font-weight:700; color:#fff; text-shadow:0 2px 5px #000; }
+  .card .title { position:absolute; left:25px; top:223px; width:285px; height:46px;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-size:23px; font-weight:600; color:#fff; line-height:1.1; }
+  .card .desc { position:absolute; left:36px; top:298px; width:263px; height:112px;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    font-size:19px; color:#3d2919; line-height:1.35; }
+  .card .type { position:absolute; left:36px; top:420px; width:263px; height:24px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:600; letter-spacing:2px; color:#73573c; }
+  .buffed { color:#1f9d3d; font-weight:800; }
+
+  .card.inhand { cursor:grab; transition:transform .18s ease, top .25s ease, left .25s ease; }
+  .card.inhand:hover { transform:translateY(-38px); }
+  .card.dragging { cursor:grabbing; transition:none; z-index:900;
+    filter:drop-shadow(0 24px 34px rgba(0,0,0,.7)); transform:none; }
+  .card.locked { filter:grayscale(.7) brightness(.55); cursor:not-allowed; }
+  .card.locked:hover { transform:none; }
+
+  #dropzone { position:absolute; left:860px; top:300px; width:880px; height:700px;
+    border:6px dashed rgba(255,255,255,.35); border-radius:36px; opacity:0;
+    transition:opacity .2s, border-color .2s, background .2s; pointer-events:none; }
+  #dropzone.show { opacity:1; }
+  #dropzone.hot { border-color:#ffd76a; background:rgba(255,215,106,.12); }
+  #dropzone .hint { position:absolute; left:0; right:0; top:40px; text-align:center;
+    color:rgba(255,255,255,.65); font-size:34px; letter-spacing:4px; font-weight:600; }
+
+  #played { position:absolute; left:1131px; top:460px; width:335px; height:477px;
+    opacity:0; transform:scale(.7); transition:opacity .3s, transform .3s; }
+  #played.show { opacity:1; transform:scale(1); }
+
+  #btnEnd { position:absolute; left:2169px; top:1267px; width:400px; height:140px;
+    border-radius:24px; background:#D9A847; border:4px solid #FFDE9A; color:#231803;
+    font-size:36px; font-weight:700; letter-spacing:1.5px; cursor:pointer;
+    box-shadow:0 6px 14px rgba(0,0,0,.55); }
+  #btnEnd:disabled { filter:grayscale(.8) brightness(.65); cursor:default; }
+
+  .pile { position:absolute; width:150px; height:208px; border-radius:14px;
+    background:rgba(18,28,46,.88); border:3px solid #B88F42;
+    display:flex; align-items:center; justify-content:center;
+    font-size:54px; font-weight:700; color:#fff; text-shadow:0 2px 5px #000; }
+  .pileLabel { position:absolute; width:150px; height:30px; text-align:center;
+    font-size:17px; font-weight:600; letter-spacing:1.5px; color:#c2c9d4;
+    text-shadow:0 2px 4px #000; }
+
+  #turnNo { position:absolute; left:1148px; top:42px; width:300px; height:58px;
+    text-align:center; font-size:42px; font-weight:700; letter-spacing:2px; color:#fff;
+    text-shadow:0 3px 6px rgba(0,0,0,.85); }
+  #roomCode { position:absolute; left:1148px; top:104px; width:300px; height:34px;
+    text-align:center; font-size:21px; font-weight:500; letter-spacing:1.5px;
+    color:#c6cdd6; text-shadow:0 2px 5px #000; }
+  #turnFlag { position:absolute; left:1048px; top:972px; width:500px; height:64px;
+    text-align:center; font-size:46px; font-weight:700; letter-spacing:3px;
+    color:#D9A847; text-shadow:0 3px 6px rgba(0,0,0,.9); }
+
+  #oppBack { position:absolute; left:2392px; top:360px; width:96px; height:134px;
+    border-radius:14px; background:rgba(18,28,46,.88); border:3px solid #B88F42;
+    display:flex; align-items:center; justify-content:center;
+    font-size:46px; font-weight:700; color:#fff; text-shadow:0 2px 5px #000; }
+  #oppLabel { position:absolute; left:2319px; top:309px; width:186px; height:54px;
+    text-align:right; font-size:19px; font-weight:600; color:#c2c9d4;
+    text-shadow:0 2px 4px #000; line-height:54px; }
+
+  .float { position:absolute; font-size:110px; font-weight:900; pointer-events:none;
+    -webkit-text-stroke:6px #fff; text-shadow:0 6px 12px rgba(0,0,0,.7);
+    animation:floatUp 1.25s ease-out forwards; }
+  .float.dmg { color:#E33A2E; }
+  .float.blk { color:#43BEF3; }
+  .float.heal { color:#4FBE6A; }
+  .float.buff { color:#D9A847; -webkit-text-stroke:5px #fff; font-size:76px; }
+  @keyframes floatUp {
+    0% { transform:translateY(0) scale(.5); opacity:0; }
+    22% { transform:translateY(-18px) scale(1.15); opacity:1; }
+    70% { transform:translateY(-90px) scale(1); opacity:1; }
+    100% { transform:translateY(-190px) scale(.95); opacity:0; }
+  }
+  .shake { animation:shake .4s ease; }
+  @keyframes shake {
+    0%,100% { transform:translateX(0) scaleX(var(--fx,1)); }
+    20% { transform:translateX(26px) scaleX(var(--fx,1)); }
+    45% { transform:translateX(-14px) scaleX(var(--fx,1)); }
+    70% { transform:translateX(9px) scaleX(var(--fx,1)); }
+  }
+
+  #over { position:absolute; inset:0; background:rgba(4,8,12,.82); display:none;
+    align-items:center; justify-content:center; flex-direction:column; gap:44px; z-index:1000; }
+  #over.show { display:flex; }
+  #over h1 { font-size:150px; color:#D9A847; letter-spacing:8px;
+    text-shadow:0 8px 20px rgba(0,0,0,.9); }
+  #over button { padding:26px 76px; font-size:38px; font-weight:700; border:none;
+    border-radius:22px; background:#D9A847; color:#231803; cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <img src="img/bg.png" style="left:0;top:0;width:2598px;height:1568px">
+
+  <!-- персонажи: исходники с прозрачностью, прямоугольники и зеркало как в Figma -->
+  <img class="char" src="img/athena.png" id="artAthena"
+       style="left:1166.6px;top:-184.1px;width:1951.1px;height:2851.6px;--fx:-1">
+  <img class="char" src="img/zeus.png" id="artZeus"
+       style="left:-479.5px;top:-216.1px;width:2080.3px;height:3040.5px">
+
+  <!-- ЗЕВС: хелсбар идёт первым, поэтому уходит ПОД слой аватара -->
+  <div class="hpwrap" style="left:196.2px;top:120.8px">
+    <div class="hpempty"></div>
+    <div class="hpclip" id="hpZ"><img src="img/hpbar.svg" style="left:0"></div>
+    <div class="hptext" id="hpZtext">50/50</div>
+  </div>
+  <svg style="left:81.2px;top:48.8px" width="226.253" height="197.5" viewBox="0 0 226.253 197.5">
+    <defs><clipPath id="clipZ"><path d="M0.270619 12.2918C-1.20736 6.01432 3.5554 0 10.0045 0H174.458C179.098 0 183.128 3.19174 184.191 7.70823L225.983 185.208C227.461 191.486 222.698 197.5 216.249 197.5H51.7956C47.1556 197.5 43.1251 194.308 42.0618 189.792L0.270619 12.2918Z"/></clipPath></defs>
+    <image href="img/portrait_z.png" width="226.253" height="197.5" clip-path="url(#clipZ)"/>
+  </svg>
+  <img src="img/frame_z.svg" style="left:81.2px;top:48.8px">
+  <div class="name" style="left:301.2px;top:57.8px">ZEUS</div>
+  <div id="pipsZ"></div>
+  <div class="val" id="nrgZ" style="left:585px;top:186px;width:130px;height:37px;
+       justify-content:flex-start;font-size:30px">3/3</div>
+  <img src="img/icon_block.svg" style="left:335.2px;top:246.8px">
+  <img src="img/icon_str.svg"   style="left:383.2px;top:248.3px">
+  <img src="img/icon_dex.svg"   style="left:431px;top:247px">
+  <div class="val" id="blkZ" style="left:330px;top:299px;width:61px;height:34px;font-size:26px">0</div>
+  <div class="val" id="strZ" style="left:383px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+  <div class="val" id="dexZ" style="left:431px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+
+  <!-- АФИНА -->
+  <div class="hpwrap" style="left:1723.2px;top:120.8px">
+    <div class="hpempty"></div>
+    <div class="hpclip right" id="hpA">
+      <img src="img/hpbar.svg" style="right:0;left:auto;transform:scaleX(-1)">
+    </div>
+    <div class="hptext" id="hpAtext">50/50</div>
+  </div>
+  <svg style="left:2273.7px;top:48.8px" width="226.253" height="197.5" viewBox="0 0 226.253 197.5">
+    <defs><clipPath id="clipA" transform="translate(226.253,0) scale(-1,1)"><path d="M0.270619 12.2918C-1.20736 6.01432 3.5554 0 10.0045 0H174.458C179.098 0 183.128 3.19174 184.191 7.70823L225.983 185.208C227.461 191.486 222.698 197.5 216.249 197.5H51.7956C47.1556 197.5 43.1251 194.308 42.0618 189.792L0.270619 12.2918Z"/></clipPath></defs>
+    <image href="img/portrait_a.png" width="226.253" height="197.5" clip-path="url(#clipA)"/>
+  </svg>
+  <img src="img/frame_a.svg" style="left:2273.7px;top:48.8px">
+  <div class="name" style="left:2119.2px;top:59.8px">APHINA</div>
+  <div id="pipsA"></div>
+  <div class="val" id="nrgA" style="left:1875px;top:186px;width:130px;height:37px;
+       justify-content:flex-end;font-size:30px">3/3</div>
+  <img src="img/icon_block.svg" style="left:2200.2px;top:246.8px">
+  <img src="img/icon_str.svg"   style="left:2155.2px;top:248.3px">
+  <img src="img/icon_dex.svg"   style="left:2107px;top:247px">
+  <div class="val" id="blkA" style="left:2195px;top:299px;width:61px;height:34px;font-size:26px">0</div>
+  <div class="val" id="strA" style="left:2155px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+  <div class="val" id="dexA" style="left:2107px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+
+  <div id="turnNo">ХОД 1</div>
+  <div id="roomCode">ПРОТОТИП ДУЭЛИ</div>
+  <div id="turnFlag">ВАШ ХОД</div>
+
+  <div id="oppLabel">КАРТ В РУКЕ</div>
+  <div id="oppBack">0</div>
+
+  <div class="pileLabel" style="left:90px;top:1192px">КОЛОДА</div>
+  <div class="pile" id="pileDraw" style="left:90px;top:1228px">0</div>
+  <div class="pileLabel" style="left:268px;top:1192px">СБРОС</div>
+  <div class="pile" id="pileDisc" style="left:268px;top:1228px">0</div>
+
+  <div id="dropzone"><div class="hint">СЫГРАТЬ КАРТУ</div></div>
+  <div id="played"></div>
+
+  <button id="btnEnd">КОНЕЦ ХОДА</button>
+
+  <div id="over"><h1 id="overText">ПОБЕДА</h1><button id="btnAgain">ЕЩЁ РАЗ</button></div>
+</div>
+
+<script>
+const STAGE_W = 2597.4, STAGE_H = 1568.8;
+const stage = document.getElementById('stage');
+let scale = 1, offX = 0, offY = 0;
+
+function fit() {
+  scale = Math.min(innerWidth / STAGE_W, innerHeight / STAGE_H);
+  offX = (innerWidth - STAGE_W * scale) / 2;
+  offY = (innerHeight - STAGE_H * scale) / 2;
+  stage.style.transform = `translate(${offX}px, ${offY}px) scale(${scale})`;
+}
+addEventListener('resize', fit); fit();
+
+const toStage = (cx, cy) => ({ x: (cx - offX) / scale, y: (cy - offY) / scale });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const $ = id => document.getElementById(id);
+
+/* ---------- карты ---------- */
+const EDGE = { attack:'#C74B41', defend:'#3E82BC', magic:'#8C66C6' };
+const TYPE_RU = { attack:'АТАКА', defend:'ЗАЩИТА', magic:'МАГИЯ' };
+
+const DB = {
+  bolt:     { title:'Удар молнии',     type:'attack', cost:1, tpl:'Нанести {v} урона',          base:6,  bonus:'str', fx:[{k:'dmg',v:6}] },
+  twin:     { title:'Двойная молния',  type:'attack', cost:1, tpl:'Нанести {v} урона дважды',   base:3,  bonus:'str', fx:[{k:'dmg',v:3},{k:'dmg',v:3}] },
+  thunder:  { title:'Громовой раскат', type:'attack', cost:3, tpl:'Нанести {v} урона',          base:14, bonus:'str', fx:[{k:'dmg',v:14}] },
+  aegis:    { title:'Эгида',           type:'defend', cost:1, tpl:'Получить {v} блока',         base:5,  bonus:'dex', fx:[{k:'blk',v:5}] },
+  winds:    { title:'Стена ветров',    type:'defend', cost:2, tpl:'Получить {v} блока',         base:9,  bonus:'dex', fx:[{k:'blk',v:9}] },
+  wrath:    { title:'Гнев Олимпа',     type:'magic',  cost:2, tpl:'+2 силы до конца боя',       bonus:null, fx:[{k:'str',v:2}] },
+  grace:    { title:'Благословение',   type:'magic',  cost:1, tpl:'+2 ловкости до конца боя',   bonus:null, fx:[{k:'dex',v:2}] },
+  ambrosia: { title:'Амброзия',        type:'magic',  cost:1, tpl:'Восстановить 6 HP',          bonus:null, fx:[{k:'heal',v:6}] },
+  insight:  { title:'Прозрение',       type:'magic',  cost:1, tpl:'Взять 2 карты',              bonus:null, fx:[{k:'draw',v:2}] },
+  spark:    { title:'Искра',           type:'magic',  cost:0, tpl:'+2 энергии. Изгнание',       bonus:null, fx:[{k:'nrg',v:2}], exhaust:true },
+};
+
+// одинаковая колода у обоих игроков — 20 карт
+const DECK = [
+  'bolt','bolt','bolt','bolt', 'twin','twin', 'thunder',
+  'aegis','aegis','aegis','aegis', 'winds','winds',
+  'wrath','wrath', 'grace', 'ambrosia', 'insight','insight', 'spark',
+];
+
+let uid = 1;
+const shuffle = a => { a = a.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i],a[j]] = [a[j],a[i]]; }
+  return a; };
+
+// описание с учётом силы/ловкости владельца; усиленное число — зелёным
+function cardDesc(c, owner) {
+  if (!c.bonus) return c.tpl;
+  const bonus = c.bonus === 'str' ? owner.str : owner.dex;
+  const v = c.base + bonus;
+  return c.tpl.replace('{v}', bonus > 0 ? `<span class="buffed">${v}</span>` : String(v));
+}
+
+function buildCardEl(key, owner, forHand) {
+  const c = DB[key];
+  const el = document.createElement('div');
+  el.className = 'card' + (forHand ? ' inhand' : '');
+  el.innerHTML =
+    `<img class="art" src="img/card.png">
+     <div class="edge" style="border-color:${EDGE[c.type]}"></div>
+     <div class="cost">${c.cost}</div>
+     <div class="title">${c.title}</div>
+     <div class="desc">${cardDesc(c, owner)}</div>
+     <div class="type">${TYPE_RU[c.type]}</div>`;
+  return el;
+}
+
+/* ---------- состояние боя (правила из движка Атлантов) ---------- */
+const HAND_SIZE = 5, MAX_HP = 50, MAX_NRG = 3;
+let S;
+
+function mkPlayer(name) {
+  return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
+           draw:shuffle(DECK).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
+}
+function newGame() {
+  S = { p:[mkPlayer('ZEUS'), mkPlayer('APHINA')], cur:0, turn:1, winner:null, busy:false };
+  startTurn(0);
+  render();
+}
+function drawCards(p, n) {
+  for (let i = 0; i < n; i++) {
+    if (!p.draw.length) {
+      if (!p.disc.length) return;
+      p.draw = shuffle(p.disc); p.disc = [];
+    }
+    p.hand.push(p.draw.pop());
+  }
+}
+function startTurn(i) {
+  const p = S.p[i];
+  p.block = 0;                    // блок сгорает в начале своего хода
+  p.energy = MAX_NRG;             // энергия не копится
+  drawCards(p, HAND_SIZE - p.hand.length);
+}
+function applyDamage(t, d) {      // блок поглощает первым
+  if (t.block > 0) {
+    if (d > t.block) { d -= t.block; t.block = 0; t.hp -= d; return d; }
+    t.block -= d; return 0;
+  }
+  t.hp -= d; return d;
+}
+function checkWin() {
+  if (S.p[1].hp <= 0) S.winner = 0;
+  else if (S.p[0].hp <= 0) S.winner = 1;
+}
+
+/* ---------- эффекты ---------- */
+const ANCHOR = [{ x:520, y:640 }, { x:2000, y:600 }];
+const ART = [$('artZeus'), $('artAthena')];
+
+function popup(side, text, kind) {
+  const d = document.createElement('div');
+  d.className = 'float ' + kind;
+  d.textContent = text;
+  d.style.left = ANCHOR[side].x + 'px';
+  d.style.top = ANCHOR[side].y + 'px';
+  stage.appendChild(d);
+  setTimeout(() => d.remove(), 1300);
+}
+function hitShake(side) {
+  const el = ART[side];
+  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+}
+
+async function resolveCard(actorIdx, key) {
+  const me = S.p[actorIdx], opp = S.p[1 - actorIdx], c = DB[key];
+  for (const f of c.fx) {
+    if (f.k === 'dmg') {
+      const total = f.v + me.str;                  // сила прибавляется к каждому удару
+      const dealt = applyDamage(opp, total);
+      popup(1 - actorIdx, '−' + total, 'dmg');
+      hitShake(1 - actorIdx);
+      if (dealt === 0) popup(1 - actorIdx, 'БЛОК', 'blk');
+    } else if (f.k === 'blk') {
+      const total = f.v + me.dex;                  // ловкость прибавляется к каждому блоку
+      me.block += total;
+      popup(actorIdx, '+' + total, 'blk');
+    } else if (f.k === 'str') { me.str += f.v; popup(actorIdx, 'СИЛА +' + f.v, 'buff'); }
+    else if (f.k === 'dex')   { me.dex += f.v; popup(actorIdx, 'ЛОВКОСТЬ +' + f.v, 'buff'); }
+    else if (f.k === 'heal')  { me.hp = Math.min(MAX_HP, me.hp + f.v); popup(actorIdx, '+' + f.v, 'heal'); }
+    else if (f.k === 'nrg')   { me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ +' + f.v, 'buff'); }
+    else if (f.k === 'draw')  { drawCards(me, f.v); }
+    render();
+    await sleep(360);
+  }
+  checkWin();
+  render();
+}
+
+/* ---------- отрисовка ---------- */
+const handEls = [];
+const PIP_STEP = 84, PIP_TOP = 185.8, PIP_Z_X = 323.2, PIP_A_X = 2183.2;
+
+function renderPips(boxId, energy, side) {
+  const box = $(boxId);
+  const slots = Math.max(MAX_NRG, energy);   // энергия сверх максимума добавляет сектора
+  box.innerHTML = '';
+  for (let i = 0; i < slots; i++) {
+    const d = document.createElement('div');
+    d.className = 'pip' + (i < energy ? '' : ' off');
+    d.style.top = PIP_TOP + 'px';
+    d.style.left = (side === 0 ? PIP_Z_X + i * PIP_STEP : PIP_A_X - i * PIP_STEP) + 'px';
+    box.appendChild(d);
+  }
+}
+
+function render() {
+  const [P, A] = S.p;
+
+  $('hpZ').style.width = Math.max(0, P.hp / MAX_HP * 100) + '%';
+  $('hpA').style.width = Math.max(0, A.hp / MAX_HP * 100) + '%';
+  $('hpZtext').textContent = Math.max(0, P.hp) + '/' + MAX_HP;
+  $('hpAtext').textContent = Math.max(0, A.hp) + '/' + MAX_HP;
+
+  renderPips('pipsZ', P.energy, 0);
+  renderPips('pipsA', A.energy, 1);
+  $('nrgZ').textContent = P.energy + '/' + MAX_NRG;
+  $('nrgA').textContent = A.energy + '/' + MAX_NRG;
+
+  $('blkZ').textContent = P.block; $('strZ').textContent = P.str; $('dexZ').textContent = P.dex;
+  $('blkA').textContent = A.block; $('strA').textContent = A.str; $('dexA').textContent = A.dex;
+
+  $('pileDraw').textContent = P.draw.length;
+  $('pileDisc').textContent = P.disc.length;
+  $('oppBack').textContent = A.hand.length;
+
+  $('turnNo').textContent = 'ХОД ' + S.turn;
+  $('turnFlag').textContent = S.winner !== null ? '' : (S.cur === 0 ? 'ВАШ ХОД' : 'ХОД СОПЕРНИКА');
+  $('btnEnd').disabled = S.cur !== 0 || S.busy || S.winner !== null;
+
+  renderHand();
+
+  if (S.winner !== null) {
+    $('overText').textContent = S.winner === 0 ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
+    $('over').classList.add('show');
+  }
+}
+
+const HAND_X = 460, HAND_Y = 1070, HAND_STEP = 328;
+
+function renderHand() {
+  const P = S.p[0];
+  handEls.forEach(e => e.remove());
+  handEls.length = 0;
+  P.hand.forEach((card, i) => {
+    const el = buildCardEl(card.key, P, true);
+    const playable = S.cur === 0 && !S.busy && S.winner === null && DB[card.key].cost <= P.energy;
+    if (!playable) el.classList.add('locked');
+    el.style.left = (HAND_X + i * HAND_STEP) + 'px';
+    el.style.top = HAND_Y + 'px';
+    el.dataset.home = el.style.left + '|' + el.style.top;
+    if (playable) attachDrag(el, card);
+    stage.appendChild(el);
+    handEls.push(el);
+  });
+}
+
+/* ---------- перетаскивание карты в центр ---------- */
+const dz = $('dropzone');
+const DZ = { x:860, y:300, w:880, h:700 };
+
+function attachDrag(el, card) {
+  el.addEventListener('pointerdown', e => {
+    if (S.cur !== 0 || S.busy || S.winner !== null) return;
+    e.preventDefault();
+    const start = toStage(e.clientX, e.clientY);
+    const ox = start.x - parseFloat(el.style.left);
+    const oy = start.y - parseFloat(el.style.top);
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+    dz.classList.add('show');
+
+    const move = ev => {
+      const p = toStage(ev.clientX, ev.clientY);
+      el.style.left = (p.x - ox) + 'px';
+      el.style.top = (p.y - oy) + 'px';
+      dz.classList.toggle('hot', inZone(el));
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.classList.remove('dragging');
+      dz.classList.remove('show', 'hot');
+      if (inZone(el)) playCard(card);
+      else { const [hx, hy] = el.dataset.home.split('|'); el.style.left = hx; el.style.top = hy; }
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  });
+}
+function inZone(el) {
+  const cx = parseFloat(el.style.left) + 167.5, cy = parseFloat(el.style.top) + 238.5;
+  return cx > DZ.x && cx < DZ.x + DZ.w && cy > DZ.y && cy < DZ.y + DZ.h;
+}
+
+/* ---------- ход игрока ---------- */
+async function playCard(card) {
+  const P = S.p[0], c = DB[card.key];
+  if (c.cost > P.energy || S.busy) { render(); return; }
+  S.busy = true;
+  P.energy -= c.cost;
+  P.hand = P.hand.filter(x => x.uid !== card.uid);
+  (c.exhaust ? P.exh : P.disc).push(card);
+  render();
+
+  await showPlayed(card.key, P);
+  await resolveCard(0, card.key);
+  await hidePlayed();
+
+  S.busy = false;
+  render();
+}
+
+const playedBox = $('played');
+async function showPlayed(key, owner) {
+  playedBox.innerHTML = '';
+  playedBox.appendChild(buildCardEl(key, owner, false));
+  playedBox.classList.add('show');
+  await sleep(520);
+}
+async function hidePlayed() {
+  playedBox.classList.remove('show');
+  await sleep(300);
+  playedBox.innerHTML = '';
+}
+
+/* ---------- ход скриптового игрока ---------- */
+async function botTurn() {
+  const B = S.p[1], P = S.p[0];
+  await sleep(700);
+
+  let guard = 0;
+  while (S.winner === null && guard++ < 12) {
+    const options = B.hand.filter(c => DB[c.key].cost <= B.energy);
+    if (!options.length) break;
+    const pick = chooseCard(options, B, P);
+    if (!pick) break;
+
+    const c = DB[pick.key];
+    B.energy -= c.cost;
+    B.hand = B.hand.filter(x => x.uid !== pick.uid);
+    (c.exhaust ? B.exh : B.disc).push(pick);
+    render();
+
+    await showPlayed(pick.key, B);   // карта соперника сначала показывается в центре
+    await resolveCard(1, pick.key);  // и только потом срабатывает её эффект
+    await hidePlayed();
+    await sleep(220);
+  }
+
+  await sleep(400);
+  if (S.winner === null) finishTurn(1);
+}
+
+// добить -> защититься под угрозой -> усилиться -> бить
+function chooseCard(options, me, opp) {
+  const dmgOf = c => DB[c.key].fx.filter(f => f.k === 'dmg').reduce((s,f) => s + f.v + me.str, 0);
+  const lethal = options.filter(c => dmgOf(c) >= opp.hp + opp.block)
+                        .sort((a,b) => DB[a.key].cost - DB[b.key].cost);
+  if (lethal.length) return lethal[0];
+
+  const blocks = options.filter(c => DB[c.key].fx.some(f => f.k === 'blk'));
+  if (me.hp < MAX_HP * 0.45 && blocks.length && me.block < 10) return blocks[0];
+
+  const util = options.filter(c => DB[c.key].fx.some(f => ['nrg','draw'].includes(f.k)));
+  if (util.length) return util[0];
+
+  if (S.turn <= 2) {
+    const buffs = options.filter(c => DB[c.key].fx.some(f => ['str','dex'].includes(f.k)));
+    if (buffs.length) return buffs[0];
+  }
+  const heals = options.filter(c => DB[c.key].fx.some(f => f.k === 'heal'));
+  if (me.hp < MAX_HP * 0.6 && heals.length) return heals[0];
+
+  const atk = options.filter(c => dmgOf(c) > 0).sort((a,b) => dmgOf(b) - dmgOf(a));
+  if (atk.length) return atk[0];
+
+  return blocks.length ? blocks[0] : options[0];
+}
+
+/* ---------- смена хода ---------- */
+function finishTurn(who) {
+  const p = S.p[who];
+  p.disc.push(...p.hand);          // рука уходит в сброс
+  p.hand = [];
+  S.cur = 1 - who;
+  if (S.cur === 0) S.turn++;
+  startTurn(S.cur);
+  render();
+  if (S.cur === 1 && S.winner === null) {
+    S.busy = true;
+    botTurn().then(() => { S.busy = false; render(); });
+  }
+}
+
+$('btnEnd').onclick = () => { if (S.cur === 0 && !S.busy && S.winner === null) finishTurn(0); };
+$('btnAgain').onclick = () => { $('over').classList.remove('show'); newGame(); };
+
+newGame();
+</script>
+</body>
+</html>

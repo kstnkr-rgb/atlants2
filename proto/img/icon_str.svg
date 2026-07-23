@@ -1,0 +1,22 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+<g id="&#208;&#177;&#208;&#190;&#208;&#181;&#208;&#178;&#208;&#190;&#208;&#185; &#209;&#141;&#208;&#186;&#209;&#128;&#208;&#176;&#208;&#189;">
+<g id="UI head zeus">
+<g id="&#209;&#129;&#208;&#184;&#208;&#187;&#208;&#176;" clip-path="url(#clip0_0_1)">
+<g id="tinder">
+<path id="Path" d="M24 3C12.4172 3 3 12.4172 3 24C3 35.5828 12.4172 45 24 45C35.5828 45 45 35.5828 45 24C45 12.4172 35.5828 3 24 3Z" fill="url(#paint0_radial_0_1)" stroke="#F32828" stroke-width="4.08511"/>
+<path id="vector" fill-rule="evenodd" clip-rule="evenodd" d="M19.7925 21.6894C19.7667 21.6986 19.736 21.6901 19.7187 21.6689C18.9024 20.5945 18.6974 18.7474 18.6475 18.0379C18.6372 17.9014 18.4827 17.8246 18.359 17.8932C15.8386 19.3006 13.5 22.6299 13.5 25.8443C13.5 31.3667 17.3582 35.9994 24 35.9994C30.2228 35.9994 34.5 31.2246 34.5 25.845C34.5 18.8059 29.44 14.129 24.9331 12.0148C24.8277 11.9653 24.6878 12.0671 24.7034 12.182C25.2838 15.9754 24.4819 20.1012 19.7925 21.6894Z" fill="white"/>
+</g>
+</g>
+</g>
+</g>
+<defs>
+<radialGradient id="paint0_radial_0_1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(24 45) scale(44.8699)">
+<stop stop-color="#FF7854"/>
+<stop offset="1" stop-color="#FD267D"/>
+</radialGradient>
+<clipPath id="clip0_0_1">
+<rect width="48" height="48" fill="white"/>
+</clipPath>
+</defs>
+</svg>
