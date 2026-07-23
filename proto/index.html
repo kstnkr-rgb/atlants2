@@ -2,11 +2,14 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Атланты — прототип дуэли</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none; }
+  /* touch-action:none — иначе браузер считает жест прокруткой и обрывает перетаскивание */
   html, body { width:100%; height:100%; background:#0a0d10; overflow:hidden;
+    touch-action:none; overscroll-behavior:none;
     font-family:"Segoe UI", system-ui, sans-serif; }
 
   /* Сцена ровно в размерах фрейма Figma — масштабируется целиком,
@@ -37,22 +40,22 @@
   .pip.off { background:#16323f; }
 
   /* карта: графика 335x477 нативная, меняются кайма и текст */
-  .card { position:absolute; width:335px; height:477px; }
+  .card { position:absolute; width:335px; height:477px; touch-action:none; }
   .card .art { position:absolute; left:0; top:0; width:335px; height:477px; border-radius:18px; }
   .card .edge { position:absolute; left:0; top:0; width:335px; height:477px;
     border:9px solid #C74B41; border-radius:18px; }
   .card .cost { position:absolute; left:20px; top:2px; width:44px; height:80px;
     display:flex; align-items:center; justify-content:center;
     font-size:42.75px; font-weight:700; color:#fff; text-shadow:0 2px 5px #000; }
-  .card .title { position:absolute; left:25px; top:223px; width:285px; height:46px;
+  .card .title { position:absolute; left:16px; top:208px; width:303px; height:68px;
     display:flex; align-items:center; justify-content:center; text-align:center;
-    font-size:23px; font-weight:600; color:#fff; line-height:1.1; }
-  .card .desc { position:absolute; left:36px; top:298px; width:263px; height:112px;
+    font-size:46px; font-weight:600; color:#fff; line-height:1.02; }
+  .card .desc { position:absolute; left:28px; top:288px; width:279px; height:106px;
     display:flex; align-items:center; justify-content:center; text-align:center;
-    font-size:19px; color:#3d2919; line-height:1.35; }
-  .card .type { position:absolute; left:36px; top:420px; width:263px; height:24px;
+    font-size:38px; color:#3d2919; line-height:1.18; }
+  .card .type { position:absolute; left:36px; top:398px; width:263px; height:46px;
     display:flex; align-items:center; justify-content:center;
-    font-size:14px; font-weight:600; letter-spacing:2px; color:#73573c; }
+    font-size:28px; font-weight:600; letter-spacing:3px; color:#73573c; }
   .buffed { color:#1f9d3d; font-weight:800; }
 
   .card.inhand { cursor:grab; transition:transform .18s ease, top .25s ease, left .25s ease; }
@@ -134,6 +137,14 @@
     text-shadow:0 8px 20px rgba(0,0,0,.9); }
   #over button { padding:26px 76px; font-size:38px; font-weight:700; border:none;
     border-radius:22px; background:#D9A847; color:#231803; cursor:pointer; }
+
+  /* портретная ориентация: игра горизонтальная, просим повернуть устройство */
+  #rotate { position:fixed; inset:0; background:#0a0d10; color:#D9A847; z-index:2000;
+    display:none; align-items:center; justify-content:center; flex-direction:column;
+    gap:28px; text-align:center; padding:40px; font-size:26px; font-weight:600;
+    line-height:1.5; }
+  #rotate .ico { font-size:76px; }
+  body.portrait #rotate { display:flex; }
 </style>
 </head>
 <body>
@@ -212,18 +223,25 @@
   <div id="over"><h1 id="overText">ПОБЕДА</h1><button id="btnAgain">ЕЩЁ РАЗ</button></div>
 </div>
 
+<div id="rotate"><div class="ico">⟳</div><div>Поверните устройство<br>горизонтально</div></div>
+
 <script>
 const STAGE_W = 2597.4, STAGE_H = 1568.8;
 const stage = document.getElementById('stage');
 let scale = 1, offX = 0, offY = 0;
 
 function fit() {
-  scale = Math.min(innerWidth / STAGE_W, innerHeight / STAGE_H);
-  offX = (innerWidth - STAGE_W * scale) / 2;
-  offY = (innerHeight - STAGE_H * scale) / 2;
+  // подгон по высоте экрана: сцена всегда занимает всю высоту устройства
+  const vw = innerWidth, vh = innerHeight;
+  scale = vh / STAGE_H;
+  offX = (vw - STAGE_W * scale) / 2;   // центрируем по горизонтали
+  offY = 0;
   stage.style.transform = `translate(${offX}px, ${offY}px) scale(${scale})`;
+  document.body.classList.toggle('portrait', vw < vh);
 }
-addEventListener('resize', fit); fit();
+addEventListener('resize', fit);
+addEventListener('orientationchange', () => setTimeout(fit, 120));
+fit();
 
 const toStage = (cx, cy) => ({ x: (cx - offX) / scale, y: (cy - offY) / scale });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -452,16 +470,22 @@ function attachDrag(el, card) {
       el.style.top = (p.y - oy) + 'px';
       dz.classList.toggle('hot', inZone(el));
     };
-    const up = () => {
+    // pointercancel обязателен: на телефоне система может прервать жест,
+    // и без него карта зависла бы под пальцем
+    const finish = play => {
       el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onCancel);
       el.classList.remove('dragging');
       dz.classList.remove('show', 'hot');
-      if (inZone(el)) playCard(card);
+      if (play && inZone(el)) playCard(card);
       else { const [hx, hy] = el.dataset.home.split('|'); el.style.left = hx; el.style.top = hy; }
     };
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
     el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onCancel);
   });
 }
 function inZone(el) {
