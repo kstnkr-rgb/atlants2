@@ -241,6 +241,7 @@
 <div id="rotate"><div class="ico">⟳</div><div>Поверните устройство<br>горизонтально</div></div>
 <button id="fs" title="Во весь экран" aria-label="Во весь экран">⛶</button>
 
+<script src="cards.js"></script>
 <script>
 const STAGE_W = 2597.4, STAGE_H = 1568.8;
 const stage = document.getElementById('stage');
@@ -309,37 +310,33 @@ const $ = id => document.getElementById(id);
 const EDGE = { attack:'#C74B41', defend:'#3E82BC', magic:'#8C66C6' };
 const TYPE_RU = { attack:'АТАКА', defend:'ЗАЩИТА', magic:'МАГИЯ' };
 
-const DB = {
-  bolt:     { title:'Удар молнии',     type:'attack', cost:1, tpl:'Нанести {v} урона',          base:6,  bonus:'str', fx:[{k:'dmg',v:6}] },
-  twin:     { title:'Двойная молния',  type:'attack', cost:1, tpl:'Нанести {v} урона дважды',   base:3,  bonus:'str', fx:[{k:'dmg',v:3},{k:'dmg',v:3}] },
-  thunder:  { title:'Громовой раскат', type:'attack', cost:3, tpl:'Нанести {v} урона',          base:14, bonus:'str', fx:[{k:'dmg',v:14}] },
-  aegis:    { title:'Эгида',           type:'defend', cost:1, tpl:'Получить {v} блока',         base:5,  bonus:'dex', fx:[{k:'blk',v:5}] },
-  winds:    { title:'Стена ветров',    type:'defend', cost:2, tpl:'Получить {v} блока',         base:9,  bonus:'dex', fx:[{k:'blk',v:9}] },
-  wrath:    { title:'Гнев Олимпа',     type:'magic',  cost:2, tpl:'+2 силы до конца боя',       bonus:null, fx:[{k:'str',v:2}] },
-  grace:    { title:'Благословение',   type:'magic',  cost:1, tpl:'+2 ловкости до конца боя',   bonus:null, fx:[{k:'dex',v:2}] },
-  ambrosia: { title:'Амброзия',        type:'magic',  cost:1, tpl:'Восстановить 6 HP',          bonus:null, fx:[{k:'heal',v:6}] },
-  insight:  { title:'Прозрение',       type:'magic',  cost:1, tpl:'Взять 2 карты',              bonus:null, fx:[{k:'draw',v:2}] },
-  spark:    { title:'Искра',           type:'magic',  cost:0, tpl:'+2 энергии. Изгнание',       bonus:null, fx:[{k:'nrg',v:2}], exhaust:true },
-};
+const DB = CARDS;   // 80 настоящих карт набора, база в cards.js
 
-// одинаковая колода у обоих игроков — 20 карт
-const DECK = [
-  'bolt','bolt','bolt','bolt', 'twin','twin', 'thunder',
-  'aegis','aegis','aegis','aegis', 'winds','winds',
-  'wrath','wrath', 'grace', 'ambrosia', 'insight','insight', 'spark',
-];
+// колода на бой: 20 карт, случайно набранных из набора; у обоих игроков одинаковая
+const DECK_SIZE = 20;
+let DECK = [];
+function buildDeck() {
+  return Array.from({ length: DECK_SIZE },
+    () => CARD_KEYS[Math.random() * CARD_KEYS.length | 0]);
+}
 
 let uid = 1;
 const shuffle = a => { a = a.slice();
   for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i],a[j]] = [a[j],a[i]]; }
   return a; };
 
-// описание с учётом силы/ловкости владельца; усиленное число — зелёным
+// {d} — урон с учётом силы, {b} — блок с учётом ловкости; усиленное число зелёным
 function cardDesc(c, owner) {
-  if (!c.bonus) return c.tpl;
-  const bonus = c.bonus === 'str' ? owner.str : owner.dex;
-  const v = c.base + bonus;
-  return c.tpl.replace('{v}', bonus > 0 ? `<span class="buffed">${v}</span>` : String(v));
+  let t = c.tpl;
+  const put = (mark, kind, stat) => {
+    if (!t.includes(mark)) return;
+    const base = (c.fx.find(f => f.k === kind) || { v: 0 }).v;
+    const v = Math.max(0, base + stat);
+    t = t.replace(mark, stat > 0 ? `<span class="buffed">${v}</span>` : String(v));
+  };
+  put('{d}', 'dmg', owner.str);
+  put('{b}', 'blk', owner.dex);
+  return t;
 }
 
 function buildCardEl(key, owner, forHand) {
@@ -362,9 +359,11 @@ let S;
 
 function mkPlayer(name) {
   return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
+           trBlock:0, trNrg:0,   // счётчики переноса блока и энергии
            draw:shuffle(DECK).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
 }
 function newGame() {
+  DECK = buildDeck();
   S = { p:[mkPlayer('ZEUS'), mkPlayer('APHINA')], cur:0, turn:1, winner:null, busy:false };
   startTurn(0);
   render();
@@ -378,10 +377,13 @@ function drawCards(p, n) {
     p.hand.push(p.draw.pop());
   }
 }
+// правила из PlayerBehaviour.RefreshStatsOnNewTurn оригинальной игры
 function startTurn(i) {
   const p = S.p[i];
-  p.block = 0;                    // блок сгорает в начале своего хода
-  p.energy = MAX_NRG;             // энергия не копится
+  if (p.trBlock > 0) p.trBlock--;      // блок перенесён — не сгорает
+  else p.block = 0;
+  if (p.trNrg > 0) { p.energy += MAX_NRG; p.trNrg--; }  // энергия копится
+  else p.energy = MAX_NRG;
   drawCards(p, HAND_SIZE - p.hand.length);
 }
 function applyDamage(t, d) {      // блок поглощает первым
@@ -414,26 +416,66 @@ function hitShake(side) {
   el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
 }
 
+const sign = v => (v > 0 ? '+' : '') + v;
+
 async function resolveCard(actorIdx, key) {
   const me = S.p[actorIdx], opp = S.p[1 - actorIdx], c = DB[key];
+  const foe = 1 - actorIdx;
+
   for (const f of c.fx) {
-    if (f.k === 'dmg') {
-      const total = f.v + me.str;                  // сила прибавляется к каждому удару
-      const dealt = applyDamage(opp, total);
-      popup(1 - actorIdx, '−' + total, 'dmg');
-      hitShake(1 - actorIdx);
-      if (dealt === 0) popup(1 - actorIdx, 'БЛОК', 'blk');
-    } else if (f.k === 'blk') {
-      const total = f.v + me.dex;                  // ловкость прибавляется к каждому блоку
-      me.block += total;
-      popup(actorIdx, '+' + total, 'blk');
-    } else if (f.k === 'str') { me.str += f.v; popup(actorIdx, 'СИЛА +' + f.v, 'buff'); }
-    else if (f.k === 'dex')   { me.dex += f.v; popup(actorIdx, 'ЛОВКОСТЬ +' + f.v, 'buff'); }
-    else if (f.k === 'heal')  { me.hp = Math.min(MAX_HP, me.hp + f.v); popup(actorIdx, '+' + f.v, 'heal'); }
-    else if (f.k === 'nrg')   { me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ +' + f.v, 'buff'); }
-    else if (f.k === 'draw')  { drawCards(me, f.v); }
+    switch (f.k) {
+      case 'dmg': {                                  // урон через блок, +сила
+        const total = Math.max(0, f.v + me.str);
+        const dealt = applyDamage(opp, total);
+        popup(foe, '−' + total, 'dmg'); hitShake(foe);
+        if (dealt === 0) popup(foe, 'БЛОК', 'blk');
+        break;
+      }
+      case 'hpFoe':                                  // прямой урон, минуя блок
+        opp.hp += f.v;
+        popup(foe, String(f.v), 'dmg'); hitShake(foe);
+        break;
+      case 'hpSelf':
+        me.hp = Math.min(MAX_HP, me.hp + f.v);
+        popup(actorIdx, sign(f.v), f.v >= 0 ? 'heal' : 'dmg');
+        break;
+      case 'blk': {                                  // блок, +ловкость
+        const total = Math.max(0, f.v + me.dex);
+        me.block += total;
+        popup(actorIdx, '+' + total, 'blk');
+        break;
+      }
+      case 'str':    me.str += f.v;  popup(actorIdx, 'СИЛА ' + sign(f.v), 'buff'); break;
+      case 'dex':    me.dex += f.v;  popup(actorIdx, 'ЛОВКОСТЬ ' + sign(f.v), 'buff'); break;
+      case 'strFoe': opp.str += f.v; popup(foe, 'СИЛА ' + sign(f.v), 'buff'); break;
+      case 'dexFoe': opp.dex += f.v; popup(foe, 'ЛОВКОСТЬ ' + sign(f.v), 'buff'); break;
+
+      case 'mulStr': me.str *= f.v;   popup(actorIdx, 'СИЛА ×' + f.v, 'buff'); break;
+      case 'mulDex': me.dex *= f.v;   popup(actorIdx, 'ЛОВКОСТЬ ×' + f.v, 'buff'); break;
+      case 'mulBlk': me.block *= f.v; popup(actorIdx, 'БЛОК ×' + f.v, 'blk'); break;
+      case 'mulNrg': me.energy *= f.v; popup(actorIdx, 'ЭНЕРГИЯ ×' + f.v, 'buff'); break;
+
+      case 'nrg':     me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ ' + sign(f.v), 'buff'); break;
+      case 'draw':    drawCards(me, f.v); break;
+      case 'trBlock': me.trBlock += f.v; popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk'); break;
+      case 'trNrg':   me.trNrg += f.v;   popup(actorIdx, 'ЭНЕРГИЯ ПЕРЕНОС', 'buff'); break;
+
+      // копия карты из руки: в прототипе берётся случайная (выбор игроком не сделан)
+      case 'copyHand':
+        if (me.hand.length) me.hand.push({ uid: uid++, key: me.hand[Math.random() * me.hand.length | 0].key });
+        break;
+      case 'copySelf':
+        me.hand.push({ uid: uid++, key });
+        break;
+      case 'copyDeck':
+        if (me.draw.length) {
+          const src = me.draw[Math.random() * me.draw.length | 0];
+          me.draw.splice(Math.random() * (me.draw.length + 1) | 0, 0, { uid: uid++, key: src.key });
+        }
+        break;
+    }
     render();
-    await sleep(360);
+    await sleep(340);
   }
   checkWin();
   render();
@@ -612,28 +654,36 @@ async function botTurn() {
 
 // добить -> защититься под угрозой -> усилиться -> бить
 function chooseCard(options, me, opp) {
-  const dmgOf = c => DB[c.key].fx.filter(f => f.k === 'dmg').reduce((s,f) => s + f.v + me.str, 0);
-  const lethal = options.filter(c => dmgOf(c) >= opp.hp + opp.block)
-                        .sort((a,b) => DB[a.key].cost - DB[b.key].cost);
+  const fx = c => DB[c.key].fx;
+  const thruBlock = c => fx(c).filter(f => f.k === 'dmg').reduce((s,f) => s + Math.max(0, f.v + me.str), 0);
+  const direct    = c => fx(c).filter(f => f.k === 'hpFoe').reduce((s,f) => s - f.v, 0);
+  const selfHit   = c => fx(c).filter(f => f.k === 'hpSelf' && f.v < 0).reduce((s,f) => s - f.v, 0);
+  const kills     = c => direct(c) + Math.max(0, thruBlock(c) - opp.block) >= opp.hp;
+
+  const safe = options.filter(c => selfHit(c) < me.hp);   // не убить себя ценой карты
+  if (!safe.length) return options[0];
+
+  const lethal = safe.filter(kills).sort((a,b) => DB[a.key].cost - DB[b.key].cost);
   if (lethal.length) return lethal[0];
 
-  const blocks = options.filter(c => DB[c.key].fx.some(f => f.k === 'blk'));
+  const blocks = safe.filter(c => fx(c).some(f => f.k === 'blk'));
   if (me.hp < MAX_HP * 0.45 && blocks.length && me.block < 10) return blocks[0];
 
-  const util = options.filter(c => DB[c.key].fx.some(f => ['nrg','draw'].includes(f.k)));
+  const util = safe.filter(c => fx(c).some(f => ['draw','nrg','mulNrg','trNrg'].includes(f.k)));
   if (util.length) return util[0];
 
   if (S.turn <= 2) {
-    const buffs = options.filter(c => DB[c.key].fx.some(f => ['str','dex'].includes(f.k)));
+    const buffs = safe.filter(c => fx(c).some(f => ['str','dex'].includes(f.k) && f.v > 0));
     if (buffs.length) return buffs[0];
   }
-  const heals = options.filter(c => DB[c.key].fx.some(f => f.k === 'heal'));
+  const heals = safe.filter(c => fx(c).some(f => f.k === 'hpSelf' && f.v > 0));
   if (me.hp < MAX_HP * 0.6 && heals.length) return heals[0];
 
-  const atk = options.filter(c => dmgOf(c) > 0).sort((a,b) => dmgOf(b) - dmgOf(a));
+  const atk = safe.filter(c => thruBlock(c) + direct(c) > 0)
+                  .sort((a,b) => (thruBlock(b) + direct(b)) - (thruBlock(a) + direct(a)));
   if (atk.length) return atk[0];
 
-  return blocks.length ? blocks[0] : options[0];
+  return blocks.length ? blocks[0] : safe[0];
 }
 
 /* ---------- смена хода ---------- */
