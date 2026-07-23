@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Атланты — прототип дуэли</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Атланты">
+<link rel="apple-touch-icon" href="img/icon-192.png">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none;
     -webkit-touch-callout:none; }
@@ -145,6 +152,14 @@
     line-height:1.5; }
   #rotate .ico { font-size:76px; }
   body.portrait #rotate { display:flex; }
+
+  /* кнопка полного экрана: полноэкранный режим требует жеста пользователя */
+  #fs { position:fixed; top:10px; right:12px; z-index:1500; width:46px; height:46px;
+    border:none; border-radius:12px; background:rgba(10,16,22,.62); color:#e8d9b0;
+    font-size:24px; line-height:1; cursor:pointer; backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; }
+  #fs:active { background:rgba(10,16,22,.9); }
+  body.fs #fs, body.standalone #fs { display:none; }
 </style>
 </head>
 <body>
@@ -224,6 +239,7 @@
 </div>
 
 <div id="rotate"><div class="ico">⟳</div><div>Поверните устройство<br>горизонтально</div></div>
+<button id="fs" title="Во весь экран" aria-label="Во весь экран">⛶</button>
 
 <script>
 const STAGE_W = 2597.4, STAGE_H = 1568.8;
@@ -231,9 +247,11 @@ const stage = document.getElementById('stage');
 let scale = 1, offX = 0, offY = 0;
 
 function fit() {
-  // подгон по высоте экрана: сцена всегда занимает всю высоту устройства
-  const vw = innerWidth, vh = innerHeight;
-  scale = vh / STAGE_H;
+  // visualViewport точнее innerHeight: он учитывает свёрнутую адресную строку
+  const vp = window.visualViewport;
+  const vw = vp ? vp.width : innerWidth;
+  const vh = vp ? vp.height : innerHeight;
+  scale = vh / STAGE_H;                // подгон по высоте экрана
   offX = (vw - STAGE_W * scale) / 2;   // центрируем по горизонтали
   offY = 0;
   stage.style.transform = `translate(${offX}px, ${offY}px) scale(${scale})`;
@@ -241,6 +259,46 @@ function fit() {
 }
 addEventListener('resize', fit);
 addEventListener('orientationchange', () => setTimeout(fit, 120));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+
+/* ---------- полный экран ---------- */
+// запущено с домашнего экрана — браузерной обвязки уже нет
+if (matchMedia('(display-mode: fullscreen)').matches ||
+    matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+  document.body.classList.add('standalone');
+}
+
+async function goFullscreen() {
+  const root = document.documentElement;
+  const req = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (!req) return false;                       // iOS Safari: API недоступен
+  try {
+    await req.call(root, { navigationUI: 'hide' });
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+function syncFsClass() {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.body.classList.toggle('fs', on);
+  setTimeout(fit, 60);
+}
+document.addEventListener('fullscreenchange', syncFsClass);
+document.addEventListener('webkitfullscreenchange', syncFsClass);
+
+document.getElementById('fs').addEventListener('click', goFullscreen);
+
+// первое касание по игре тоже разворачивает на весь экран
+let fsTried = false;
+addEventListener('pointerdown', () => {
+  if (fsTried) return;
+  fsTried = true;
+  goFullscreen();
+}, { once: false });
+
 fit();
 
 const toStage = (cx, cy) => ({ x: (cx - offX) / scale, y: (cy - offY) / scale });
