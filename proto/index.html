@@ -450,8 +450,15 @@ async function resolveCard(actorIdx, key) {
       case 'strFoe': opp.str += f.v; popup(foe, 'СИЛА ' + sign(f.v), 'buff'); break;
       case 'dexFoe': opp.dex += f.v; popup(foe, 'ЛОВКОСТЬ ' + sign(f.v), 'buff'); break;
 
-      case 'mulStr': me.str *= f.v;   popup(actorIdx, 'СИЛА ×' + f.v, 'buff'); break;
-      case 'mulDex': me.dex *= f.v;   popup(actorIdx, 'ЛОВКОСТЬ ×' + f.v, 'buff'); break;
+      // как в оригинале (FighterBehaviour.ChangeStrength/ChangeAgility):
+      // умножение отрицательной характеристики ничего не делает,
+      // иначе дебафф лавинообразно усиливал бы сам себя
+      case 'mulStr':
+        if (me.str > 0) { me.str *= f.v; popup(actorIdx, 'СИЛА ×' + f.v, 'buff'); }
+        break;
+      case 'mulDex':
+        if (me.dex > 0) { me.dex *= f.v; popup(actorIdx, 'ЛОВКОСТЬ ×' + f.v, 'buff'); }
+        break;
       case 'mulBlk': me.block *= f.v; popup(actorIdx, 'БЛОК ×' + f.v, 'blk'); break;
       case 'mulNrg': me.energy *= f.v; popup(actorIdx, 'ЭНЕРГИЯ ×' + f.v, 'buff'); break;
 
@@ -660,8 +667,15 @@ function chooseCard(options, me, opp) {
   const selfHit   = c => fx(c).filter(f => f.k === 'hpSelf' && f.v < 0).reduce((s,f) => s - f.v, 0);
   const kills     = c => direct(c) + Math.max(0, thruBlock(c) - opp.block) >= opp.hp;
 
-  const safe = options.filter(c => selfHit(c) < me.hp);   // не убить себя ценой карты
-  if (!safe.length) return options[0];
+  // множитель по неположительной характеристике бесполезен — не тратить на него ход
+  const useful = c => fx(c).some(f =>
+    f.k === 'mulStr' ? me.str > 0 :
+    f.k === 'mulDex' ? me.dex > 0 :
+    f.k === 'mulBlk' ? me.block > 0 :
+    f.k === 'mulNrg' ? me.energy > 0 : true);
+
+  const safe = options.filter(c => selfHit(c) < me.hp && useful(c));  // и не убить себя ценой карты
+  if (!safe.length) return options.find(c => selfHit(c) < me.hp) || options[0];
 
   const lethal = safe.filter(kills).sort((a,b) => DB[a.key].cost - DB[b.key].cost);
   if (lethal.length) return lethal[0];

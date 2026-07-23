@@ -53,6 +53,7 @@ vm.runInContext(script + `
 ;globalThis.__DECK = DECK;
 ;globalThis.__desc = cardDesc;
 ;globalThis.__start = startTurn;
+;globalThis.__resolve = resolveCard;
 `, ctx);
 
 (async () => {
@@ -99,6 +100,24 @@ vm.runInContext(script + `
   check('энергия без переноса = максимуму', P.energy === 3, String(P.energy));
   P.energy = 2; P.trNrg = 1; ctx.__start(0);
   check('перенос энергии: остаток прибавлен', P.energy === 5, String(P.energy));
+
+  // умножение отрицательной силы/ловкости не должно углублять дебафф
+  const A = S0.p[1];
+  const runFx = async (idx, key) => { await ctx.__resolve(idx, key); };
+  P.str = -5; P.dex = -4; P.block = 0;
+  await runFx(0, 'm15');                      // «Помощь Зевса»: удваивает силу и ловкость
+  check('умножение не углубляет минус по силе', P.str === -5, String(P.str));
+  check('умножение не углубляет минус по ловкости', P.dex === -4, String(P.dex));
+  P.str = 3; P.dex = 2;
+  await runFx(0, 'm15');
+  check('положительная сила удваивается', P.str === 6, String(P.str));
+  check('положительная ловкость удваивается', P.dex === 4, String(P.dex));
+
+  // урон никогда не отрицательный
+  A.hp = 40; A.block = 0; P.str = -99;
+  await runFx(0, 'a9');                       // «Праща Давида», 20 урона
+  check('при огромном минусе силы урон = 0, а не лечение', A.hp === 40, String(A.hp));
+  P.str = 0;
 
   // зелёная подсветка бонусов
   const dmgCard = ctx.__DB.a8, blkCard = ctx.__DB.d22;
