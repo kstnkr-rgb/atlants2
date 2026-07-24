@@ -58,8 +58,9 @@
     display:flex; align-items:center; justify-content:center; text-align:center;
     font-size:23px; font-weight:600; color:#fff; line-height:1.1; }
   .card .desc { position:absolute; left:28px; top:288px; width:279px; height:112px;
-    display:flex; align-items:center; justify-content:center; text-align:center;
-    font-size:19px; color:#3d2919; line-height:1.3; }
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; font-size:21px; color:#3d2919; line-height:1.35; }
+  .dline { white-space:nowrap; }
   .card .type { position:absolute; left:36px; top:398px; width:263px; height:46px;
     display:flex; align-items:center; justify-content:center;
     font-size:28px; font-weight:600; letter-spacing:3px; color:#73573c; }
@@ -389,36 +390,51 @@ const shuffle = a => { a = a.slice();
   return a; };
 
 // названия параметров заменяются иконками — так описание занимает меньше места
-const ICON_WORDS = {};
-{
-  const str = '<img class="ic" src="img/icon_str.svg" alt="сила">';
-  const dex = '<img class="ic" src="img/icon_dex.svg" alt="ловкость">';
-  const blk = '<img class="ic" src="img/icon_block.svg" alt="блок">';
-  const nrg = '<span class="ic-nrg" title="энергия"></span>';
-  const hp  = '<span class="ic-hp" title="здоровье">♥</span>';
-  const add = (icon, ...words) => words.forEach(w => ICON_WORDS[w] = icon);
-  add(str, 'сила', 'силу', 'силы', 'сил', 'силе');
-  add(dex, 'ловкость', 'ловкости', 'ловкостей');
-  add(blk, 'блок', 'блока', 'блоки');
-  add(nrg, 'энергия', 'энергию', 'энергии');
-  add(hp,  'здоровье', 'здоровья', 'здоровью');
-}
-function iconize(html) {
-  return html.replace(/[а-яёА-ЯЁ]+/g, w => ICON_WORDS[w.toLowerCase()] || w);
-}
+const IC = {
+  str: '<img class="ic" src="img/icon_str.svg" alt="сила">',
+  dex: '<img class="ic" src="img/icon_dex.svg" alt="ловкость">',
+  blk: '<img class="ic" src="img/icon_block.svg" alt="блок">',
+  nrg: '<span class="ic-nrg" title="энергия"></span>',
+  hp:  '<span class="ic-hp" title="здоровье">♥</span>',
+};
+const num = (v, buffed) => buffed ? `<span class="buffed">${v}</span>` : String(v);
+const pm = v => (v > 0 ? '+' : '−') + Math.abs(v);   // знак вместо слов «прибавляет»/«отнимает»
 
-// {d} — урон с учётом силы, {b} — блок с учётом ловкости; усиленное число зелёным
+// описание строится из эффектов: каждый параметр отдельной строкой,
+// знаком и иконкой вместо слов
 function cardDesc(c, owner) {
-  let t = c.tpl;
-  const put = (mark, kind, stat) => {
-    if (!t.includes(mark)) return;
-    const base = (c.fx.find(f => f.k === kind) || { v: 0 }).v;
-    const v = Math.max(0, base + stat);
-    t = t.replace(mark, stat > 0 ? `<span class="buffed">${v}</span>` : String(v));
-  };
-  put('{d}', 'dmg', owner.str);
-  put('{b}', 'blk', owner.dex);
-  return iconize(t);
+  const lines = c.fx.map(f => {
+    switch (f.k) {
+      case 'dmg': {
+        const v = f.v + owner.str;
+        return `урон врагу ${num(v, owner.str > 0)}`;
+      }
+      case 'hpFoe':  return `${pm(f.v)} ${IC.hp} врагу`;
+      case 'hpSelf': return f.v < 0 ? `урон себе ${-f.v}` : `${pm(f.v)} ${IC.hp}`;
+      case 'blk': {
+        const v = f.v + owner.dex;
+        return `+${num(v, owner.dex > 0)} ${IC.blk}`;
+      }
+      case 'str':    return `${pm(f.v)} ${IC.str}`;
+      case 'dex':    return `${pm(f.v)} ${IC.dex}`;
+      case 'strFoe': return `${pm(f.v)} ${IC.str} врагу`;
+      case 'dexFoe': return `${pm(f.v)} ${IC.dex} врагу`;
+      case 'mulStr': return `×${f.v} ${IC.str}`;
+      case 'mulDex': return `×${f.v} ${IC.dex}`;
+      case 'mulBlk': return `×${f.v} ${IC.blk}`;
+      case 'mulNrg': return `×${f.v} ${IC.nrg}`;
+      case 'nrg':    return `${pm(f.v)} ${IC.nrg}`;
+      case 'draw':   return `+${f.v} карт`;
+      case 'trBlock': return `перенос ${IC.blk}${f.v > 1 ? ` ${f.v} х.` : ''}`;
+      case 'trNrg':   return `перенос ${IC.nrg}${f.v > 1 ? ` ${f.v} х.` : ''}`;
+      case 'copyHand': return 'копия карты из руки';
+      case 'copySelf': return 'копия этой карты';
+      case 'copyDeck': return 'копия карты в колоду';
+      default: return '';
+    }
+  }).filter(Boolean);
+  if (c.exhaust) lines.push('<i>изгнание</i>');
+  return lines.map(l => `<div class="dline">${l}</div>`).join('');
 }
 
 function buildCardEl(key, owner, forHand) {
