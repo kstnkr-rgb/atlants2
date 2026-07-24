@@ -189,6 +189,57 @@
     align-items:center; justify-content:center; }
   #logToggle:active { background:rgba(10,16,22,.9); }
 
+  /* ---------- стартовый экран и редактор колод ---------- */
+  .screen { position:absolute; inset:0; background:rgba(4,8,12,.94); z-index:1300;
+    display:none; flex-direction:column; padding:44px 60px; }
+  .screen.show { display:flex; }
+  .scr-head { display:flex; align-items:center; gap:26px; flex:0 0 auto; margin-bottom:22px;
+    font-size:44px; font-weight:700; color:#D9A847; letter-spacing:2px; }
+  .btn { border:none; border-radius:16px; background:#D9A847; color:#231803;
+    font-size:30px; font-weight:700; padding:16px 34px; cursor:pointer; }
+  .btn.ghost { background:rgba(255,255,255,.12); color:#e8eef4; }
+  .btn:disabled { filter:grayscale(.7) brightness(.6); cursor:default; }
+  .scr-head .btn { padding:12px 26px; font-size:26px; }
+  .spacer { margin-left:auto; }
+
+  #startScreen .ss-title { font-size:96px; font-weight:700; color:#D9A847; letter-spacing:10px;
+    text-align:center; margin:40px 0 10px; }
+  #startScreen .ss-sub { text-align:center; color:#98a5b2; font-size:26px; margin-bottom:40px; }
+  #startScreen .ss-list { flex:1 1 auto; overflow-y:auto; touch-action:pan-y;
+    overscroll-behavior:contain; display:flex; flex-direction:column; gap:14px;
+    max-width:1200px; width:100%; margin:0 auto; }
+  .ss-item { display:flex; align-items:center; gap:20px; padding:20px 26px; border-radius:14px;
+    background:rgba(255,255,255,.07); border:3px solid transparent; cursor:pointer; }
+  .ss-item.sel { border-color:#D9A847; background:rgba(217,168,71,.16); }
+  .ss-item .ss-name { font-size:32px; font-weight:600; color:#fff; }
+  .ss-item .ss-info { margin-left:auto; font-size:24px; color:#a7b4c0; }
+  #startScreen .ss-actions { flex:0 0 auto; display:flex; gap:20px; justify-content:center;
+    margin-top:34px; }
+
+  .ed-slots { flex:0 0 auto; display:grid; grid-template-columns:repeat(10, 235px);
+    gap:14px; justify-content:center; margin-bottom:20px; }
+  .ed-label { flex:0 0 auto; font-size:26px; color:#a7b4c0; letter-spacing:2px; margin-bottom:10px; }
+  .ed-avail { flex:1 1 auto; overflow-y:auto; touch-action:pan-y; overscroll-behavior:contain;
+    display:grid; grid-template-columns:repeat(10, 235px); gap:14px;
+    justify-content:center; align-content:start; padding-right:12px; }
+  .ed-avail::-webkit-scrollbar, #startScreen .ss-list::-webkit-scrollbar { width:12px; }
+  .ed-avail::-webkit-scrollbar-track, #startScreen .ss-list::-webkit-scrollbar-track {
+    background:rgba(255,255,255,.06); border-radius:6px; }
+  .ed-avail::-webkit-scrollbar-thumb, #startScreen .ss-list::-webkit-scrollbar-thumb {
+    background:rgba(255,255,255,.3); border-radius:6px; }
+
+  /* карта в редакторе — тот же вид, что в руке, только уменьшенный */
+  .mini { position:relative; width:235px; height:334px; cursor:pointer; }
+  .mini .card { position:absolute; left:0; top:0; transform:scale(.7); transform-origin:0 0; }
+  .mini:hover .card { filter:brightness(1.18); }
+  .slot { width:235px; height:334px; border:4px dashed rgba(255,255,255,.22);
+    border-radius:14px; display:flex; align-items:center; justify-content:center;
+    font-size:34px; color:rgba(255,255,255,.25); }
+  #edName { font-size:28px; padding:12px 18px; border-radius:12px; border:3px solid #3a4654;
+    background:rgba(255,255,255,.08); color:#fff; width:420px; }
+  #edCount { font-size:30px; font-weight:700; color:#e8eef4; }
+
+
   /* просмотр колоды */
   .pile.clickable { cursor:pointer; }
   .pile.clickable:active { border-color:#FFDE9A; }
@@ -289,6 +340,32 @@
   <div class="pile" id="pileDisc" style="left:268px;top:1228px">0</div>
 
   <div id="logBox"></div>
+
+
+<div class="screen" id="startScreen">
+  <div class="ss-title">АТЛАНТЫ</div>
+  <div class="ss-sub">выберите колоду</div>
+  <div class="ss-list" id="ssList"></div>
+  <div class="ss-actions">
+    <button class="btn" id="ssPlay">ИГРАТЬ</button>
+    <button class="btn ghost" id="ssEdit">РЕДАКТОР КОЛОД</button>
+  </div>
+</div>
+
+<div class="screen" id="deckEditor">
+  <div class="scr-head">
+    РЕДАКТОР
+    <input id="edName" maxlength="24" placeholder="название колоды">
+    <span id="edCount">0 / 20</span>
+    <span class="spacer"></span>
+    <button class="btn" id="edSave">СОХРАНИТЬ</button>
+    <button class="btn ghost" id="edClear">ОЧИСТИТЬ</button>
+    <button class="btn ghost" id="edBack">НАЗАД</button>
+  </div>
+  <div class="ed-slots" id="edSlots"></div>
+  <div class="ed-label">ДОСТУПНЫЕ КАРТЫ — нажмите, чтобы добавить</div>
+  <div class="ed-avail" id="edAvail"></div>
+</div>
 
   <div id="deckView">
     <div class="dv-head">КОЛОДА — <span id="dvCount">0</span><button class="dv-close" id="dvClose">✕</button></div>
@@ -439,17 +516,22 @@ function cardDesc(c, owner) {
   return lines.map(l => `<div class="dline">${l}</div>`).join('');
 }
 
-function buildCardEl(key, owner, forHand) {
+const NEUTRAL = { str: 0, dex: 0 };
+function cardInner(key, owner) {
   const c = DB[key];
-  const el = document.createElement('div');
-  el.className = 'card' + (forHand ? ' inhand' : '');
-  el.innerHTML =
-    `<img class="art" src="img/card.png">
+  return `<img class="art" src="img/card.png">
      <div class="edge" style="border-color:${EDGE[c.type]}"></div>
      <div class="cost">${c.cost}</div>
      <div class="title">${c.title}</div>
-     <div class="desc">${cardDesc(c, owner)}</div>
+     <div class="desc">${cardDesc(c, owner || NEUTRAL)}</div>
      <div class="type">${TYPE_RU[c.type]}</div>`;
+}
+const cardHTML = (key, owner) => `<div class="card">${cardInner(key, owner)}</div>`;
+
+function buildCardEl(key, owner, forHand) {
+  const el = document.createElement('div');
+  el.className = 'card' + (forHand ? ' inhand' : '');
+  el.innerHTML = cardInner(key, owner);
   return el;
 }
 
@@ -464,8 +546,10 @@ function mkPlayer(name) {
            debWait:{ str:0, dex:0 },      // сколько своих ходов дебафф ещё держится
            draw:shuffle(DECK).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
 }
-function newGame() {
-  DECK = buildDeck();
+let lastDeck = null;
+function newGame(deckKeys) {
+  lastDeck = deckKeys && deckKeys.length ? deckKeys.slice() : null;
+  DECK = lastDeck || buildDeck();
   S = { p:[mkPlayer('ZEUS'), mkPlayer('APHINA')], cur:0, turn:1, winner:null, busy:false };
   logBox.innerHTML = '';
   logMsg(`— новый бой, колода ${DECK_SIZE} карт —`, 'turn');
@@ -939,9 +1023,102 @@ function finishTurn(who) {
 }
 
 $('btnEnd').onclick = () => { if (S.cur === 0 && !S.busy && S.winner === null) finishTurn(0); };
-$('btnAgain').onclick = () => { $('over').classList.remove('show'); newGame(); };
+$('btnAgain').onclick = () => { $('over').classList.remove('show'); newGame(lastDeck); };
+
+/* ---------- хранение колод ---------- */
+const DECKS_KEY = 'atlanteans_decks';
+function loadDecks() {
+  try { return JSON.parse(localStorage.getItem(DECKS_KEY)) || []; } catch (e) { return []; }
+}
+function storeDecks() {
+  try { localStorage.setItem(DECKS_KEY, JSON.stringify(decks)); } catch (e) {}
+}
+let decks = loadDecks();
+let chosen = -1;                 // -1 — случайная колода
+
+/* ---------- стартовый экран ---------- */
+const startScreen = $('startScreen'), deckEditor = $('deckEditor');
+const showScreen = el => { $('startScreen').classList.remove('show');
+  $('deckEditor').classList.remove('show'); if (el) el.classList.add('show'); };
+
+function renderStart() {
+  const rows = [`<div class="ss-item${chosen === -1 ? ' sel' : ''}" data-pick="-1">
+      <span class="ss-name">Случайная колода</span>
+      <span class="ss-info">${DECK_SIZE} карт наугад</span></div>`];
+  decks.forEach((d, i) => rows.push(`<div class="ss-item${chosen === i ? ' sel' : ''}" data-pick="${i}">
+      <span class="ss-name">${d.name}</span>
+      <span class="ss-info">${d.cards.length} карт</span>
+      <button class="btn ghost" data-del="${i}" style="padding:8px 20px;font-size:22px">✕</button>
+    </div>`));
+  $('ssList').innerHTML = rows.join('');
+}
+$('ssList').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    decks.splice(+del.dataset.del, 1); storeDecks();
+    if (chosen >= decks.length) chosen = -1;
+    renderStart(); return;
+  }
+  const pick = e.target.closest('[data-pick]');
+  if (pick) { chosen = +pick.dataset.pick; renderStart(); }
+});
+$('ssPlay').onclick = () => {
+  showScreen(null);
+  newGame(chosen >= 0 ? decks[chosen].cards : null);
+};
+$('ssEdit').onclick = () => { openEditor(chosen >= 0 ? decks[chosen] : null); };
+
+/* ---------- редактор колод ---------- */
+let edDeck = [], edIndex = -1;
+function openEditor(deck) {
+  edIndex = deck ? decks.indexOf(deck) : -1;
+  edDeck = deck ? deck.cards.slice() : [];
+  $('edName').value = deck ? deck.name : '';
+  renderEditor();
+  showScreen(deckEditor);
+}
+function renderEditor() {
+  $('edCount').textContent = `${edDeck.length} / ${DECK_SIZE}`;
+  let slots = '';
+  for (let i = 0; i < DECK_SIZE; i++) {
+    slots += edDeck[i]
+      ? `<div class="mini" data-slot="${i}" title="убрать">${cardHTML(edDeck[i])}</div>`
+      : '<div class="slot">+</div>';
+  }
+  $('edSlots').innerHTML = slots;
+  $('edAvail').innerHTML = CARD_KEYS
+    .slice().sort((a, b) => DB[a].no - DB[b].no)
+    .map(k => `<div class="mini" data-add="${k}" title="добавить">${cardHTML(k)}</div>`).join('');
+  $('edSave').disabled = edDeck.length === 0;
+}
+$('edSlots').addEventListener('click', e => {
+  const el = e.target.closest('[data-slot]');
+  if (!el) return;
+  edDeck.splice(+el.dataset.slot, 1);
+  renderEditor();
+});
+$('edAvail').addEventListener('click', e => {
+  const el = e.target.closest('[data-add]');
+  if (!el || edDeck.length >= DECK_SIZE) return;
+  edDeck.push(el.dataset.add);
+  renderEditor();
+});
+$('edClear').onclick = () => { edDeck = []; renderEditor(); };
+$('edBack').onclick = () => { renderStart(); showScreen(startScreen); };
+$('edSave').onclick = () => {
+  if (!edDeck.length) return;
+  const name = ($('edName').value || '').trim() || `Колода ${decks.length + 1}`;
+  const deck = { name, cards: edDeck.slice() };
+  if (edIndex >= 0) decks[edIndex] = deck; else { decks.push(deck); edIndex = decks.length - 1; }
+  storeDecks();
+  chosen = edIndex;
+  renderStart();
+  showScreen(startScreen);
+};
 
 newGame();
+renderStart();
+showScreen(startScreen);
 </script>
 </body>
 </html>

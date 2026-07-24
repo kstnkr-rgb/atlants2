@@ -62,6 +62,9 @@ vm.runInContext(script + `
 ;globalThis.__desc = cardDesc;
 ;globalThis.__start = startTurn;
 ;globalThis.__resolve = resolveCard;
+;globalThis.__newGame = newGame;
+;globalThis.__DECK_SIZE = DECK_SIZE;
+;globalThis.__DECKnow = () => DECK;
 `, ctx);
 
 (async () => {
@@ -150,6 +153,21 @@ vm.runInContext(script + `
         ctx.__desc(dmgCard, { str:3, dex:0 }));
   check('ловкость подсвечивает блок', ctx.__desc(blkCard, { str:0, dex:4 }).includes('buffed">34<'),
         ctx.__desc(blkCard, { str:0, dex:4 }));
+
+  // редактор колод: слоты, сохранение, игра выбранной колодой
+  check('в колоде 20 слотов', ctx.__DECK_SIZE === 20, String(ctx.__DECK_SIZE));
+
+  const my = ['a9', 'a9', 'd22', 'm13'];
+  ctx.__newGame(my);
+  const G = ctx.__get();
+  const mine = p => [...p.draw, ...p.hand].map(c => c.key).sort();
+  check('игра идёт заданной колодой', JSON.stringify(mine(G.p[0])) === JSON.stringify(my.slice().sort()),
+        mine(G.p[0]).join(','));
+  check('у соперника та же колода', JSON.stringify(mine(G.p[1])) === JSON.stringify(my.slice().sort()));
+
+  ctx.__newGame(null);
+  check('без колоды набирается случайная из 20', ctx.__DECKnow().length === 20, String(ctx.__DECKnow().length));
+  check('случайная колода из настоящих карт', ctx.__DECKnow().every(k => k in ctx.__DB));
 
   // полная партия
   let turns = 0;
