@@ -229,7 +229,10 @@
     background:rgba(255,255,255,.3); border-radius:6px; }
 
   /* карта в редакторе — тот же вид, что в руке, только уменьшенный */
-  .mini { position:relative; width:235px; height:334px; cursor:pointer; }
+  .mini { position:relative; width:235px; height:334px; cursor:pointer; touch-action:pan-y; }
+  /* у карты в руке touch-action:none ради перетаскивания;
+     в редакторе это мешало прокрутке пальцем — возвращаем вертикальный жест */
+  .mini .card { touch-action:pan-y; }
   .mini .card { position:absolute; left:0; top:0; transform:scale(.7); transform-origin:0 0; }
   .mini:hover .card { filter:brightness(1.18); }
   .slot { width:235px; height:334px; border:4px dashed rgba(255,255,255,.22);
@@ -358,6 +361,8 @@
     <input id="edName" maxlength="24" placeholder="название колоды">
     <span id="edCount">0 / 20</span>
     <span class="spacer"></span>
+    <button class="btn ghost" id="edCopy">СКОПИРОВАТЬ</button>
+    <button class="btn ghost" id="edPaste">ВСТАВИТЬ</button>
     <button class="btn" id="edSave">СОХРАНИТЬ</button>
     <button class="btn ghost" id="edClear">ОЧИСТИТЬ</button>
     <button class="btn ghost" id="edBack">НАЗАД</button>
@@ -1132,6 +1137,40 @@ $('edAvail').addEventListener('click', e => {
   edDeck.push(el.dataset.add);
   renderEditor();
 });
+/* ---------- перенос колоды строкой ---------- */
+const BY_NO = {};
+for (const [k, c] of Object.entries(DB)) BY_NO[c.no] = k;
+
+function deckCode(name, cards) {
+  return 'ATL1:' + String(name).replace(/[:|]/g, ' ') + ':' + cards.map(k => DB[k].no).join(',');
+}
+function parseCode(str) {
+  const m = /^ATL1:([^:]*):([\d,]+)$/.exec(String(str || '').trim());
+  if (!m) return null;
+  const cards = m[2].split(',').map(n => BY_NO[+n]).filter(Boolean);
+  return cards.length ? { name: m[1].trim() || 'Импорт', cards: cards.slice(0, DECK_SIZE) } : null;
+}
+
+$('edCopy').onclick = async () => {
+  if (!edDeck.length) return;
+  const code = deckCode(($('edName').value || 'Колода').trim(), edDeck);
+  try {
+    await navigator.clipboard.writeText(code);
+    $('edCopy').textContent = 'СКОПИРОВАНО';
+    setTimeout(() => $('edCopy').textContent = 'СКОПИРОВАТЬ', 1600);
+  } catch (e) {
+    prompt('Скопируйте код колоды:', code);   // если буфер обмена недоступен
+  }
+};
+$('edPaste').onclick = () => {
+  const got = parseCode(prompt('Вставьте код колоды:'));
+  if (!got) { if (got !== null) return; alert('Код не распознан'); return; }
+  edDeck = got.cards;
+  if (!$('edName').value.trim()) $('edName').value = got.name;
+  edIndex = -1;                                // вставленная колода сохраняется как новая
+  renderEditor();
+};
+
 $('edClear').onclick = () => { edDeck = []; renderEditor(); };
 $('edBack').onclick = () => { renderStart(); showScreen(startScreen); };
 $('edSave').onclick = () => {
