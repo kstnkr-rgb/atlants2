@@ -1049,8 +1049,20 @@ const PRESETS = [
       'm28','m28','m27','m26','m26','m19','m19','d11','d11','d8','d8',
       'a13','a13','m7','a6','a6','m10','m10','m22','a17' ] },
 ];
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
 let decks = loadDecks();
-if (!decks.length) { decks = PRESETS.map(d => ({ name:d.name, cards:d.cards.slice() })); storeDecks(); }
+// пресеты добавляются один раз и не зависят от того, есть ли уже свои колоды;
+// после этого удаление пресета остаётся в силе
+const SEED_KEY = 'atlanteans_presets_v1';
+if (!lsGet(SEED_KEY)) {
+  PRESETS.forEach(pr => {
+    if (!decks.some(d => d.name === pr.name)) decks.push({ name: pr.name, cards: pr.cards.slice() });
+  });
+  lsSet(SEED_KEY, '1');
+  storeDecks();
+}
 let chosen = -1;                 // -1 — случайная колода
 
 /* ---------- стартовый экран ---------- */
