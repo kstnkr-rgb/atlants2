@@ -160,6 +160,22 @@
     display:flex; align-items:center; justify-content:center; }
   #fs:active { background:rgba(10,16,22,.9); }
   body.fs #fs, body.standalone #fs { display:none; }
+
+  /* отладочный лог */
+  #logBox { position:absolute; left:60px; top:430px; width:650px; height:560px;
+    background:rgba(0,0,0,.55); border:2px solid rgba(255,255,255,.18); border-radius:16px;
+    padding:14px 18px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+  #logBox .line { font-size:20px; line-height:1.45; color:#dbe3ea;
+    font-family:Consolas, "Cascadia Mono", monospace; white-space:pre-wrap; }
+  #logBox .line.turn { color:#D9A847; margin-top:6px; }
+  #logBox .line.you  { color:#8fd7ff; }
+  #logBox .line.foe  { color:#ffb0a6; }
+  body.nolog #logBox { display:none; }
+  #logToggle { position:fixed; top:10px; right:66px; z-index:1500; width:46px; height:46px;
+    border:none; border-radius:12px; background:rgba(10,16,22,.62); color:#e8d9b0;
+    font-size:22px; line-height:1; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; }
+  #logToggle:active { background:rgba(10,16,22,.9); }
 </style>
 </head>
 <body>
@@ -230,6 +246,8 @@
   <div class="pileLabel" style="left:268px;top:1192px">СБРОС</div>
   <div class="pile" id="pileDisc" style="left:268px;top:1228px">0</div>
 
+  <div id="logBox"></div>
+
   <div id="dropzone"><div class="hint">СЫГРАТЬ КАРТУ</div></div>
   <div id="played"></div>
 
@@ -240,6 +258,7 @@
 
 <div id="rotate"><div class="ico">⟳</div><div>Поверните устройство<br>горизонтально</div></div>
 <button id="fs" title="Во весь экран" aria-label="Во весь экран">⛶</button>
+<button id="logToggle" title="Лог отладки" aria-label="Лог отладки">≡</button>
 
 <script src="cards.js"></script>
 <script>
@@ -359,13 +378,17 @@ let S;
 
 function mkPlayer(name) {
   return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
-           trBlock:0, trNrg:0,   // счётчики переноса блока и энергии
+           trBlock:0, trNrg:0,            // счётчики переноса блока и энергии
+           deb:{ str:0, dex:0 },          // сколько силы/ловкости снято дебаффом
+           debWait:{ str:0, dex:0 },      // сколько своих ходов дебафф ещё держится
            draw:shuffle(DECK).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
 }
 function newGame() {
   DECK = buildDeck();
   S = { p:[mkPlayer('ZEUS'), mkPlayer('APHINA')], cur:0, turn:1, winner:null, busy:false };
   startTurn(0);
+  logBox.innerHTML = '';
+  logMsg(`— новый бой, колода ${DECK_SIZE} карт —`, 'turn');
   render();
 }
 function drawCards(p, n) {
@@ -384,6 +407,10 @@ function startTurn(i) {
   else p.block = 0;
   if (p.trNrg > 0) { p.energy += MAX_NRG; p.trNrg--; }  // энергия копится
   else p.energy = MAX_NRG;
+  for (const s of ['str', 'dex']) {     // дебафф силы/ловкости действует один ход
+    if (p.debWait[s] > 0) p.debWait[s]--;
+    else if (p.deb[s] > 0) { p[s] += p.deb[s]; p.deb[s] = 0; }
+  }
   drawCards(p, HAND_SIZE - p.hand.length);
 }
 function applyDamage(t, d) {      // блок поглощает первым
@@ -402,6 +429,28 @@ function checkWin() {
 const ANCHOR = [{ x:520, y:640 }, { x:2000, y:600 }];
 const ART = [$('artZeus'), $('artAthena')];
 
+/* ---------- отладочный лог ---------- */
+const logBox = $('logBox');
+const LOG_MAX = 24;
+const FX_RU = {
+  dmg:'урон', hpFoe:'прямой урон', hpSelf:'здоровье', blk:'блок',
+  str:'сила', dex:'ловкость', strFoe:'сила врагу', dexFoe:'ловкость врагу',
+  mulStr:'сила ×', mulDex:'ловкость ×', mulBlk:'блок ×', mulNrg:'энергия ×',
+  nrg:'энергия', draw:'добор', trBlock:'перенос блока', trNrg:'перенос энергии',
+  copyHand:'копия из руки', copySelf:'копия себя', copyDeck:'копия в колоду',
+};
+function logMsg(text, cls) {
+  const d = document.createElement('div');
+  d.className = 'line' + (cls ? ' ' + cls : '');
+  d.textContent = text;
+  logBox.prepend(d);                                    // новые строки — внизу панели
+  while (logBox.children.length > LOG_MAX) logBox.lastChild.remove();
+}
+function logState(p) {
+  return `${p.name} HP${p.hp} бл${p.block} сил${p.str} лов${p.dex} эн${p.energy}`;
+}
+$('logToggle').addEventListener('click', () => document.body.classList.toggle('nolog'));
+
 function popup(side, text, kind) {
   const d = document.createElement('div');
   d.className = 'float ' + kind;
@@ -417,6 +466,18 @@ function hitShake(side) {
 }
 
 const sign = v => (v > 0 ? '+' : '') + v;
+
+// изменение силы/ловкости с нижней границей 0
+function bump(who, stat, delta, side, label, byFoe) {
+  const before = who[stat];
+  who[stat] = Math.max(0, before + delta);
+  const real = who[stat] - before;
+  if (real < 0) {                       // дебафф временный: снятое вернётся владельцу
+    who.deb[stat] += -real;
+    who.debWait[stat] = byFoe ? 1 : 0;  // чужой доживает до конца хода жертвы
+  }
+  if (real !== 0) popup(side, label + ' ' + sign(real), 'buff');
+}
 
 async function resolveCard(actorIdx, key) {
   const me = S.p[actorIdx], opp = S.p[1 - actorIdx], c = DB[key];
@@ -445,10 +506,12 @@ async function resolveCard(actorIdx, key) {
         popup(actorIdx, '+' + total, 'blk');
         break;
       }
-      case 'str':    me.str += f.v;  popup(actorIdx, 'СИЛА ' + sign(f.v), 'buff'); break;
-      case 'dex':    me.dex += f.v;  popup(actorIdx, 'ЛОВКОСТЬ ' + sign(f.v), 'buff'); break;
-      case 'strFoe': opp.str += f.v; popup(foe, 'СИЛА ' + sign(f.v), 'buff'); break;
-      case 'dexFoe': opp.dex += f.v; popup(foe, 'ЛОВКОСТЬ ' + sign(f.v), 'buff'); break;
+      // сила и ловкость не уходят в минус: ниже нуля дебафф просто не действует,
+      // и во всплывающем числе показывается реально снятая величина
+      case 'str':    bump(me,  'str', f.v, actorIdx, 'СИЛА', false); break;
+      case 'dex':    bump(me,  'dex', f.v, actorIdx, 'ЛОВКОСТЬ', false); break;
+      case 'strFoe': bump(opp, 'str', f.v, foe,      'СИЛА', true); break;
+      case 'dexFoe': bump(opp, 'dex', f.v, foe,      'ЛОВКОСТЬ', true); break;
 
       // как в оригинале (FighterBehaviour.ChangeStrength/ChangeAgility):
       // умножение отрицательной характеристики ничего не делает,
@@ -481,11 +544,14 @@ async function resolveCard(actorIdx, key) {
         }
         break;
     }
+    logMsg(`    ${FX_RU[f.k] || f.k} ${sign(f.v)}`, actorIdx === 0 ? 'you' : 'foe');
     render();
     await sleep(340);
   }
+  logMsg(`    = ${logState(me)} | ${logState(opp)}`);
   checkWin();
   render();
+  if (S.winner !== null) logMsg(`ПОБЕДА: ${S.p[S.winner].name}`, 'turn');
 }
 
 /* ---------- отрисовка ---------- */
@@ -608,6 +674,7 @@ async function playCard(card) {
   P.energy -= c.cost;
   P.hand = P.hand.filter(x => x.uid !== card.uid);
   (c.exhaust ? P.exh : P.disc).push(card);
+  logMsg(`Вы: «${c.title}» (${c.cost} эн.)`, 'you');
   render();
 
   await showPlayed(card.key, P);
@@ -647,6 +714,7 @@ async function botTurn() {
     B.energy -= c.cost;
     B.hand = B.hand.filter(x => x.uid !== pick.uid);
     (c.exhaust ? B.exh : B.disc).push(pick);
+    logMsg(`Соперник: «${c.title}» (${c.cost} эн.)`, 'foe');
     render();
 
     await showPlayed(pick.key, B);   // карта соперника сначала показывается в центре
@@ -708,6 +776,7 @@ function finishTurn(who) {
   S.cur = 1 - who;
   if (S.cur === 0) S.turn++;
   startTurn(S.cur);
+  logMsg(`— ход ${S.turn}: ${S.p[S.cur].name} —`, 'turn');
   render();
   if (S.cur === 1 && S.winner === null) {
     S.busy = true;

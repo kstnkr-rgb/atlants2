@@ -17,8 +17,16 @@ function el() {
       toggle(c, on) { on ? this._s.add(c) : this._s.delete(c); },
       contains(c) { return this._s.has(c); } },
     dataset: {}, textContent: '', disabled: false, offsetWidth: 1, children: [],
-    appendChild(c) { this.children.push(c); return c; },
-    remove() {}, addEventListener() {}, removeEventListener() {}, setPointerCapture() {},
+    appendChild(c) { c._parent = this; this.children.push(c); return c; },
+    prepend(c) { c._parent = this; this.children.unshift(c); return c; },
+    get lastChild() { return this.children[this.children.length - 1] || null; },
+    remove() {
+      const p = this._parent;
+      if (!p) return;
+      const i = p.children.indexOf(this);
+      if (i >= 0) p.children.splice(i, 1);
+    },
+    addEventListener() {}, removeEventListener() {}, setPointerCapture() {},
   };
   let h = '';
   Object.defineProperty(e, 'innerHTML', {
@@ -118,6 +126,22 @@ vm.runInContext(script + `
   await runFx(0, 'a9');                       // «Праща Давида», 20 урона
   check('при огромном минусе силы урон = 0, а не лечение', A.hp === 40, String(A.hp));
   P.str = 0;
+
+  // дебафф силы/ловкости держится ровно один ход жертвы
+  P.str = 5; P.dex = 3; P.deb.str = 0; P.deb.dex = 0; P.debWait.str = 0; P.debWait.dex = 0;
+  await runFx(1, 'm16');                      // «Проклятие Зевса»: соперник снимает 5 силы
+  check('дебафф применился', P.str === 0, String(P.str));
+  ctx.__start(0);
+  check('дебафф действует свой ход', P.str === 0, String(P.str));
+  ctx.__start(0);
+  check('дебафф спал на следующий ход', P.str === 5, String(P.str));
+
+  // снимается не больше, чем есть: вернуть должны ровно снятое
+  P.str = 2; P.deb.str = 0; P.debWait.str = 0;
+  await runFx(1, 'm16');                      // -5 при силе 2
+  check('сила не ушла в минус', P.str === 0, String(P.str));
+  ctx.__start(0); ctx.__start(0);
+  check('вернулось ровно снятое', P.str === 2, String(P.str));
 
   // зелёная подсветка бонусов
   const dmgCard = ctx.__DB.a8, blkCard = ctx.__DB.d22;
