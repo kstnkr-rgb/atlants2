@@ -136,12 +136,12 @@ vm.runInContext(script + `
   ctx.__start(0);
   check('дебафф спал на следующий ход', P.str === 5, String(P.str));
 
-  // снимается не больше, чем есть: вернуть должны ровно снятое
+  // нижней границы нет: сила уходит в минус и полностью возвращается
   P.str = 2; P.deb.str = 0; P.debWait.str = 0;
   await runFx(1, 'm16');                      // -5 при силе 2
-  check('сила не ушла в минус', P.str === 0, String(P.str));
+  check('сила уходит в минус', P.str === -3, String(P.str));
   ctx.__start(0); ctx.__start(0);
-  check('вернулось ровно снятое', P.str === 2, String(P.str));
+  check('вернулось всё снятое', P.str === 2, String(P.str));
 
   // зелёная подсветка бонусов
   const dmgCard = ctx.__DB.a8, blkCard = ctx.__DB.d22;

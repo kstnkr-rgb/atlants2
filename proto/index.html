@@ -180,6 +180,32 @@
     font-size:22px; line-height:1; cursor:pointer; display:flex;
     align-items:center; justify-content:center; }
   #logToggle:active { background:rgba(10,16,22,.9); }
+
+  /* просмотр колоды */
+  .pile.clickable { cursor:pointer; }
+  .pile.clickable:active { border-color:#FFDE9A; }
+  #deckView { position:absolute; inset:0; background:rgba(4,8,12,.9); z-index:1200;
+    display:none; flex-direction:column; padding:40px 60px; }
+  #deckView.show { display:flex; }
+  #deckView .dv-head { display:flex; align-items:center; gap:24px; flex:0 0 auto;
+    font-size:44px; font-weight:700; color:#D9A847; letter-spacing:2px; margin-bottom:24px; }
+  #deckView .dv-close { margin-left:auto; width:70px; height:70px; border:none; border-radius:16px;
+    background:#D9A847; color:#231803; font-size:36px; font-weight:700; cursor:pointer; }
+  #deckView .dv-list { flex:1 1 auto; overflow-y:auto; touch-action:pan-y;
+    overscroll-behavior:contain; display:grid; grid-template-columns:1fr 1fr;
+    gap:14px 28px; align-content:start; padding-right:14px; }
+  #deckView .dv-list::-webkit-scrollbar { width:12px; }
+  #deckView .dv-list::-webkit-scrollbar-track { background:rgba(255,255,255,.06); border-radius:6px; }
+  #deckView .dv-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,.3); border-radius:6px; }
+  .dv-row { display:flex; align-items:flex-start; gap:18px; background:rgba(255,255,255,.06);
+    border-left:8px solid #C74B41; border-radius:12px; padding:14px 18px; }
+  .dv-row .dv-cost { flex:0 0 54px; height:54px; border-radius:50%; background:#D9A847;
+    color:#231803; font-size:30px; font-weight:700; display:flex;
+    align-items:center; justify-content:center; }
+  .dv-row .dv-body { flex:1 1 auto; }
+  .dv-row .dv-name { font-size:27px; font-weight:600; color:#fff; }
+  .dv-row .dv-text { font-size:21px; color:#c3cbd4; line-height:1.3; margin-top:4px; }
+  .dv-row .dv-mult { flex:0 0 auto; font-size:28px; font-weight:700; color:#D9A847; }
 </style>
 </head>
 <body>
@@ -246,11 +272,16 @@
   <div id="oppBack">0</div>
 
   <div class="pileLabel" style="left:90px;top:1192px">КОЛОДА</div>
-  <div class="pile" id="pileDraw" style="left:90px;top:1228px">0</div>
+  <div class="pile clickable" id="pileDraw" style="left:90px;top:1228px">0</div>
   <div class="pileLabel" style="left:268px;top:1192px">СБРОС</div>
   <div class="pile" id="pileDisc" style="left:268px;top:1228px">0</div>
 
   <div id="logBox"></div>
+
+  <div id="deckView">
+    <div class="dv-head">КОЛОДА — <span id="dvCount">0</span><button class="dv-close" id="dvClose">✕</button></div>
+    <div class="dv-list" id="dvList"></div>
+  </div>
 
   <div id="dropzone"><div class="hint">СЫГРАТЬ КАРТУ</div></div>
   <div id="played"></div>
@@ -463,6 +494,32 @@ function logState(p) {
 }
 $('logToggle').addEventListener('click', () => document.body.classList.toggle('nolog'));
 
+/* ---------- просмотр колоды ---------- */
+const deckView = $('deckView');
+function showDeck() {
+  const p = S.p[0];
+  const counts = {};
+  p.draw.forEach(c => counts[c.key] = (counts[c.key] || 0) + 1);
+  const keys = Object.keys(counts).sort((a, b) => DB[a].no - DB[b].no);
+
+  $('dvCount').textContent = p.draw.length + ' карт (' + keys.length + ' разных)';
+  $('dvList').innerHTML = keys.map(k => {
+    const c = DB[k];
+    return `<div class="dv-row" style="border-left-color:${EDGE[c.type]}">
+      <div class="dv-cost">${c.cost}</div>
+      <div class="dv-body">
+        <div class="dv-name">${c.title}</div>
+        <div class="dv-text">${cardDesc(c, p)}</div>
+      </div>
+      ${counts[k] > 1 ? `<div class="dv-mult">×${counts[k]}</div>` : ''}
+    </div>`;
+  }).join('');
+  deckView.classList.add('show');
+}
+$('pileDraw').addEventListener('click', showDeck);
+$('dvClose').addEventListener('click', () => deckView.classList.remove('show'));
+deckView.addEventListener('click', e => { if (e.target === deckView) deckView.classList.remove('show'); });
+
 function popup(side, text, kind) {
   const d = document.createElement('div');
   d.className = 'float ' + kind;
@@ -482,7 +539,7 @@ const sign = v => (v > 0 ? '+' : '') + v;
 // изменение силы/ловкости с нижней границей 0
 function bump(who, stat, delta, side, label, byFoe) {
   const before = who[stat];
-  who[stat] = Math.max(0, before + delta);
+  who[stat] = before + delta;           // нижней границы нет: сила и ловкость уходят в минус
   const real = who[stat] - before;
   if (real < 0) {                       // дебафф временный: снятое вернётся владельцу
     who.deb[stat] += -real;
