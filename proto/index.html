@@ -539,18 +539,23 @@ function buildCardEl(key, owner, forHand) {
 const HAND_SIZE = 5, MAX_HP = 50, MAX_NRG = 3;
 let S;
 
-function mkPlayer(name) {
+function mkPlayer(name, deckKeys) {
   return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
            trBlock:0, trNrg:0,            // счётчики переноса блока и энергии
            deb:{ str:0, dex:0 },          // сколько силы/ловкости снято дебаффом
            debWait:{ str:0, dex:0 },      // сколько своих ходов дебафф ещё держится
-           draw:shuffle(DECK).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
+           draw:shuffle(deckKeys).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
 }
 let lastDeck = null;
+// соперник берёт случайную колоду из сохранённых в редакторе
+function foeDeck() {
+  return decks.length ? decks[Math.random() * decks.length | 0].cards.slice() : buildDeck();
+}
 function newGame(deckKeys) {
   lastDeck = deckKeys && deckKeys.length ? deckKeys.slice() : null;
   DECK = lastDeck || buildDeck();
-  S = { p:[mkPlayer('ZEUS'), mkPlayer('APHINA')], cur:0, turn:1, winner:null, busy:false };
+  const foe = foeDeck();
+  S = { p:[mkPlayer('ZEUS', DECK), mkPlayer('APHINA', foe)], cur:0, turn:1, winner:null, busy:false };
   logBox.innerHTML = '';
   logMsg(`— новый бой, колода ${DECK_SIZE} карт —`, 'turn');
   startTurn(0);
@@ -1033,7 +1038,19 @@ function loadDecks() {
 function storeDecks() {
   try { localStorage.setItem(DECKS_KEY, JSON.stringify(decks)); } catch (e) {}
 }
+const PRESETS = [
+  { name: 'Натиск', cards: [
+      'a9','a9','a8','a8','a11','a11','a2','a2','a21','a26','a26',
+      'a6','a6','a14','a14','a4','m13','m14','a3','a3' ] },
+  { name: 'Оборона', cards: [
+      'd22','d25','d25','d21','d21','d12','d12','d13','d6','d6',
+      'd28','d28','d9','d9','d18','d17','d27','d27','d23','d23' ] },
+  { name: 'Энергия', cards: [
+      'm28','m28','m27','m26','m26','m19','m19','d11','d11','d8','d8',
+      'a13','a13','m7','a6','a6','m10','m10','m22','a17' ] },
+];
 let decks = loadDecks();
+if (!decks.length) { decks = PRESETS.map(d => ({ name:d.name, cards:d.cards.slice() })); storeDecks(); }
 let chosen = -1;                 // -1 — случайная колода
 
 /* ---------- стартовый экран ---------- */

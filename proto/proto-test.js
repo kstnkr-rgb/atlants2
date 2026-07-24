@@ -65,6 +65,7 @@ vm.runInContext(script + `
 ;globalThis.__newGame = newGame;
 ;globalThis.__DECK_SIZE = DECK_SIZE;
 ;globalThis.__DECKnow = () => DECK;
+;globalThis.__decks = () => decks;
 `, ctx);
 
 (async () => {
@@ -80,7 +81,7 @@ vm.runInContext(script + `
 
   check('в базе 80 настоящих карт', Object.keys(ctx.__DB).length === 80, String(Object.keys(ctx.__DB).length));
   check('временных карт не осталось', !TEMP.some(k => k in ctx.__DB));
-  check('колоды одинаковые у обоих', JSON.stringify(all(S0.p[0])) === JSON.stringify(all(S0.p[1])));
+  check('колода соперника из настоящих карт', all(S0.p[1]).every(k => k in ctx.__DB));
   check('в колоде 20 карт', ctx.__DECK.length === 20, String(ctx.__DECK.length));
   check('колода набрана из настоящих карт', ctx.__DECK.every(k => k in ctx.__DB));
   check('старт: 50 HP у обоих', S0.p[0].hp === 50 && S0.p[1].hp === 50);
@@ -163,7 +164,19 @@ vm.runInContext(script + `
   const mine = p => [...p.draw, ...p.hand].map(c => c.key).sort();
   check('игра идёт заданной колодой', JSON.stringify(mine(G.p[0])) === JSON.stringify(my.slice().sort()),
         mine(G.p[0]).join(','));
-  check('у соперника та же колода', JSON.stringify(mine(G.p[1])) === JSON.stringify(my.slice().sort()));
+  check('соперник играет своей колодой из пресетов',
+        ctx.__decks().some(d => JSON.stringify(d.cards.slice().sort()) === JSON.stringify(mine(G.p[1]))),
+        mine(G.p[1]).length + ' карт');
+
+  // пресеты
+  const pre = ctx.__decks();
+  check('три пресета созданы', pre.length >= 3, String(pre.length));
+  check('пресеты названы', ['Натиск','Оборона','Энергия'].every(n => pre.some(d => d.name === n)),
+        pre.map(d => d.name).join(','));
+  check('в каждом пресете 20 карт', pre.slice(0,3).every(d => d.cards.length === 20),
+        pre.slice(0,3).map(d => d.cards.length).join(','));
+  check('пресеты собраны из настоящих карт',
+        pre.slice(0,3).every(d => d.cards.every(k => k in ctx.__DB)));
 
   ctx.__newGame(null);
   check('без колоды набирается случайная из 20', ctx.__DECKnow().length === 20, String(ctx.__DECKnow().length));
@@ -171,7 +184,7 @@ vm.runInContext(script + `
 
   // полная партия
   let turns = 0;
-  while (ctx.__get().winner === null && turns < 300) {
+  while (ctx.__get().winner === null && turns < 4000) {
     const S = ctx.__get();
     if (S.cur === 0 && !S.busy) {
       const p = S.p[0];
@@ -179,7 +192,8 @@ vm.runInContext(script + `
       if (opts.length) {
         opts.sort((a, b) => ctx.__DB[b.key].cost - ctx.__DB[a.key].cost);
         await ctx.__play(opts[0]);
-      } else { ctx.__finish(0); turns++; }
+      } else ctx.__finish(0);
+      turns++;                       // растёт всегда: страховка от вечного цикла
     }
     await new Promise(r => setTimeout(r, 1));
   }
