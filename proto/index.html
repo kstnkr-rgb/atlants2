@@ -164,7 +164,11 @@
   /* отладочный лог */
   #logBox { position:absolute; left:60px; top:430px; width:650px; height:560px;
     background:rgba(0,0,0,.55); border:2px solid rgba(255,255,255,.18); border-radius:16px;
-    padding:14px 18px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+    padding:14px 18px; display:flex; flex-direction:column-reverse;
+    overflow-y:auto; touch-action:pan-y; overscroll-behavior:contain; }
+  #logBox::-webkit-scrollbar { width:10px; }
+  #logBox::-webkit-scrollbar-track { background:rgba(255,255,255,.06); border-radius:5px; }
+  #logBox::-webkit-scrollbar-thumb { background:rgba(255,255,255,.28); border-radius:5px; }
   #logBox .line { font-size:20px; line-height:1.45; color:#dbe3ea;
     font-family:Consolas, "Cascadia Mono", monospace; white-space:pre-wrap; }
   #logBox .line.turn { color:#D9A847; margin-top:6px; }
@@ -386,9 +390,9 @@ function mkPlayer(name) {
 function newGame() {
   DECK = buildDeck();
   S = { p:[mkPlayer('ZEUS'), mkPlayer('APHINA')], cur:0, turn:1, winner:null, busy:false };
-  startTurn(0);
   logBox.innerHTML = '';
   logMsg(`— новый бой, колода ${DECK_SIZE} карт —`, 'turn');
+  startTurn(0);
   render();
 }
 function drawCards(p, n) {
@@ -403,15 +407,23 @@ function drawCards(p, n) {
 // правила из PlayerBehaviour.RefreshStatsOnNewTurn оригинальной игры
 function startTurn(i) {
   const p = S.p[i];
-  if (p.trBlock > 0) p.trBlock--;      // блок перенесён — не сгорает
-  else p.block = 0;
+  let blockNote;
+  if (p.trBlock > 0) { p.trBlock--; blockNote = `перенесён ${p.block} (ещё ${p.trBlock} х.)`; }
+  else { blockNote = p.block ? `сгорел ${p.block}` : 'нет'; p.block = 0; }
   if (p.trNrg > 0) { p.energy += MAX_NRG; p.trNrg--; }  // энергия копится
   else p.energy = MAX_NRG;
   for (const s of ['str', 'dex']) {     // дебафф силы/ловкости действует один ход
     if (p.debWait[s] > 0) p.debWait[s]--;
-    else if (p.deb[s] > 0) { p[s] += p.deb[s]; p.deb[s] = 0; }
+    else if (p.deb[s] > 0) {
+      const back = p.deb[s];
+      p[s] += back; p.deb[s] = 0;
+      logMsg(`  дебафф спал: ${s === 'str' ? 'сила' : 'ловкость'} +${back} → ${p[s]} (${p.name})`, 'turn');
+    }
   }
-  drawCards(p, HAND_SIZE - p.hand.length);
+  const need = HAND_SIZE - p.hand.length;
+  drawCards(p, need);
+  logMsg(`  ${p.name}: блок ${blockNote}, энергия ${p.energy}, добор ${need} → рука ${p.hand.length}, ` +
+         `колода ${p.draw.length}, сброс ${p.disc.length}`);
 }
 function applyDamage(t, d) {      // блок поглощает первым
   if (t.block > 0) {
@@ -431,7 +443,7 @@ const ART = [$('artZeus'), $('artAthena')];
 
 /* ---------- отладочный лог ---------- */
 const logBox = $('logBox');
-const LOG_MAX = 24;
+const LOG_MAX = 400;   // история для прокрутки
 const FX_RU = {
   dmg:'урон', hpFoe:'прямой урон', hpSelf:'здоровье', blk:'блок',
   str:'сила', dex:'ловкость', strFoe:'сила врагу', dexFoe:'ловкость врагу',
@@ -484,25 +496,33 @@ async function resolveCard(actorIdx, key) {
   const foe = 1 - actorIdx;
 
   for (const f of c.fx) {
+    let note = '';
     switch (f.k) {
       case 'dmg': {                                  // урон через блок, +сила
         const total = Math.max(0, f.v + me.str);
         const dealt = applyDamage(opp, total);
+        note = `урон ${f.v}${me.str ? ` +${me.str} силы = ${total}` : ''}` +
+               ` → блок поглотил ${total - dealt}, по HP ${dealt} (${opp.name} HP ${opp.hp})`;
         popup(foe, '−' + total, 'dmg'); hitShake(foe);
         if (dealt === 0) popup(foe, 'БЛОК', 'blk');
         break;
       }
       case 'hpFoe':                                  // прямой урон, минуя блок
         opp.hp += f.v;
+        note = `прямой урон ${-f.v} мимо блока → ${opp.name} HP ${opp.hp}`;
         popup(foe, String(f.v), 'dmg'); hitShake(foe);
         break;
-      case 'hpSelf':
+      case 'hpSelf': {
+        const was = me.hp;
         me.hp = Math.min(MAX_HP, me.hp + f.v);
+        note = `${f.v >= 0 ? 'лечение' : 'цена карты'} ${sign(f.v)} → HP ${was} → ${me.hp}`;
         popup(actorIdx, sign(f.v), f.v >= 0 ? 'heal' : 'dmg');
         break;
+      }
       case 'blk': {                                  // блок, +ловкость
         const total = Math.max(0, f.v + me.dex);
         me.block += total;
+        note = `блок ${f.v}${me.dex ? ` +${me.dex} ловкости = ${total}` : ''} → всего ${me.block}`;
         popup(actorIdx, '+' + total, 'blk');
         break;
       }
@@ -517,34 +537,47 @@ async function resolveCard(actorIdx, key) {
       // умножение отрицательной характеристики ничего не делает,
       // иначе дебафф лавинообразно усиливал бы сам себя
       case 'mulStr':
-        if (me.str > 0) { me.str *= f.v; popup(actorIdx, 'СИЛА ×' + f.v, 'buff'); }
+        if (me.str > 0) { me.str *= f.v; popup(actorIdx, 'СИЛА ×' + f.v, 'buff'); note = `сила ×${f.v} → ${me.str}`; }
+        else note = `сила ×${f.v} не сработала (сила ${me.str})`;
         break;
       case 'mulDex':
-        if (me.dex > 0) { me.dex *= f.v; popup(actorIdx, 'ЛОВКОСТЬ ×' + f.v, 'buff'); }
+        if (me.dex > 0) { me.dex *= f.v; popup(actorIdx, 'ЛОВКОСТЬ ×' + f.v, 'buff'); note = `ловкость ×${f.v} → ${me.dex}`; }
+        else note = `ловкость ×${f.v} не сработала (ловкость ${me.dex})`;
         break;
-      case 'mulBlk': me.block *= f.v; popup(actorIdx, 'БЛОК ×' + f.v, 'blk'); break;
-      case 'mulNrg': me.energy *= f.v; popup(actorIdx, 'ЭНЕРГИЯ ×' + f.v, 'buff'); break;
+      case 'mulBlk': me.block *= f.v; popup(actorIdx, 'БЛОК ×' + f.v, 'blk'); note = `блок ×${f.v} → ${me.block}`; break;
+      case 'mulNrg': me.energy *= f.v; popup(actorIdx, 'ЭНЕРГИЯ ×' + f.v, 'buff'); note = `энергия ×${f.v} → ${me.energy}`; break;
 
-      case 'nrg':     me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ ' + sign(f.v), 'buff'); break;
-      case 'draw':    drawCards(me, f.v); break;
-      case 'trBlock': me.trBlock += f.v; popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk'); break;
-      case 'trNrg':   me.trNrg += f.v;   popup(actorIdx, 'ЭНЕРГИЯ ПЕРЕНОС', 'buff'); break;
+      case 'nrg':     me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ ' + sign(f.v), 'buff'); note = `энергия ${sign(f.v)} → ${me.energy}`; break;
+      case 'draw': {
+        const was = me.hand.length;
+        drawCards(me, f.v);
+        note = `добор ${f.v} → рука ${was} → ${me.hand.length}, колода ${me.draw.length}, сброс ${me.disc.length}`;
+        break;
+      }
+      case 'trBlock': me.trBlock += f.v; popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk'); note = `перенос блока на ${f.v} х. (счётчик ${me.trBlock})`; break;
+      case 'trNrg':   me.trNrg += f.v;   popup(actorIdx, 'ЭНЕРГИЯ ПЕРЕНОС', 'buff'); note = `перенос энергии на ${f.v} х. (счётчик ${me.trNrg})`; break;
 
       // копия карты из руки: в прототипе берётся случайная (выбор игроком не сделан)
       case 'copyHand':
-        if (me.hand.length) me.hand.push({ uid: uid++, key: me.hand[Math.random() * me.hand.length | 0].key });
+        if (me.hand.length) {
+          const src = me.hand[Math.random() * me.hand.length | 0];
+          me.hand.push({ uid: uid++, key: src.key });
+          note = `копия «${DB[src.key].title}» в руку → рука ${me.hand.length}`;
+        } else note = 'копия из руки: рука пуста';
         break;
       case 'copySelf':
         me.hand.push({ uid: uid++, key });
+        note = `копия «${c.title}» в руку → рука ${me.hand.length}`;
         break;
       case 'copyDeck':
         if (me.draw.length) {
           const src = me.draw[Math.random() * me.draw.length | 0];
           me.draw.splice(Math.random() * (me.draw.length + 1) | 0, 0, { uid: uid++, key: src.key });
-        }
+          note = `копия «${DB[src.key].title}» в колоду → колода ${me.draw.length}`;
+        } else note = 'копия в колоду: колода пуста';
         break;
     }
-    logMsg(`    ${FX_RU[f.k] || f.k} ${sign(f.v)}`, actorIdx === 0 ? 'you' : 'foe');
+    logMsg('    ' + (note || `${FX_RU[f.k] || f.k} ${sign(f.v)}`), actorIdx === 0 ? 'you' : 'foe');
     render();
     await sleep(340);
   }
@@ -775,8 +808,8 @@ function finishTurn(who) {
   p.hand = [];
   S.cur = 1 - who;
   if (S.cur === 0) S.turn++;
-  startTurn(S.cur);
   logMsg(`— ход ${S.turn}: ${S.p[S.cur].name} —`, 'turn');
+  startTurn(S.cur);
   render();
   if (S.cur === 1 && S.winner === null) {
     S.busy = true;
