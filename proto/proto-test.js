@@ -66,6 +66,8 @@ vm.runInContext(script + `
 ;globalThis.__DECK_SIZE = DECK_SIZE;
 ;globalThis.__DECKnow = () => DECK;
 ;globalThis.__decks = () => decks;
+;globalThis.__MAX = MAX_COPIES;
+;globalThis.__STARTER = STARTER_DECK;
 `, ctx);
 
 (async () => {
@@ -79,7 +81,7 @@ vm.runInContext(script + `
   const all = p => [...p.draw, ...p.hand, ...p.disc, ...p.exh].map(c => c.key).sort();
   const TEMP = ['bolt','twin','thunder','aegis','winds','wrath','grace','ambrosia','insight','spark'];
 
-  check('в базе 80 настоящих карт', Object.keys(ctx.__DB).length === 80, String(Object.keys(ctx.__DB).length));
+  check('в базе 84 карты из конфига', Object.keys(ctx.__DB).length === 84, String(Object.keys(ctx.__DB).length));
   check('временных карт не осталось', !TEMP.some(k => k in ctx.__DB));
   check('колода соперника из настоящих карт', all(S0.p[1]).every(k => k in ctx.__DB));
   check('в колоде 20 карт', ctx.__DECK.length === 20, String(ctx.__DECK.length));
@@ -200,6 +202,12 @@ vm.runInContext(script + `
   ctx.__newGame(null);
   check('без колоды набирается случайная из 20', ctx.__DECKnow().length === 20, String(ctx.__DECKnow().length));
   check('случайная колода из настоящих карт', ctx.__DECKnow().every(k => k in ctx.__DB));
+
+  // стартовая колода и лимит копий
+  check('лимит копий = 3', ctx.__MAX === 3, String(ctx.__MAX));
+  check('стартовая колода из конфига (10 карт)', ctx.__STARTER.length === 10, String(ctx.__STARTER.length));
+  check('стартовая колода из настоящих карт', ctx.__STARTER.every(k => k in ctx.__DB));
+  check('4 базовые карты вернулись (a1,a5,d2,d4)', ['a1','a5','d2','d4'].every(k => k in ctx.__DB));
 
   // полная партия — детерминированная агрессивная колода у обоих,
   // чтобы бой гарантированно завершался (случайные колоды с копиями и
