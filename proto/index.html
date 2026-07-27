@@ -67,6 +67,9 @@
     display:flex; align-items:center; justify-content:center;
     font-size:28px; font-weight:600; letter-spacing:3px; color:#73573c; }
   .buffed { color:#1f9d3d; font-weight:800; }
+  /* крупная цифра урона слева — крупнее в 1.5 раза, но не раздувает строку */
+  .dnum { font-size:1.5em; font-weight:800; line-height:0.7; vertical-align:-0.14em;
+    display:inline-block; }
   /* иконки параметров вместо слов — экономят место в описании.
      #stage img задан absolute, поэтому здесь возвращаем иконки в поток текста */
   #stage img.ic, img.ic { position:static; display:inline-block;
@@ -502,18 +505,19 @@ const IC = {
 };
 const num = (v, buffed) => buffed ? `<span class="buffed">${v}</span>` : String(v);
 const pm = v => (v > 0 ? '+' : '−') + Math.abs(v);   // знак вместо слов «прибавляет»/«отнимает»
+const big = html => `<span class="dnum">${html}</span>`;   // крупная цифра урона слева
 
 // описание строится из эффектов: каждый параметр отдельной строкой,
 // знаком и иконкой вместо слов
 function cardDesc(c, owner) {
   const lines = c.fx.map(f => {
     switch (f.k) {
-      case 'dmg': {
+      case 'dmg': {                                  // цифра урона крупная и слева
         const v = f.v + owner.str;
-        return `урон врагу ${num(v, owner.str > 0)}`;
+        return `${big(num(v, owner.str > 0))} урон врагу`;
       }
-      case 'hpFoe':  return `${pm(f.v)} ${IC.hp} врагу`;
-      case 'hpSelf': return f.v < 0 ? `урон себе ${-f.v}` : `${pm(f.v)} ${IC.hp}`;
+      case 'hpFoe':  return `${big(-f.v)} ${IC.hp} врагу`;
+      case 'hpSelf': return f.v < 0 ? `${big(-f.v)} урон себе` : `${pm(f.v)} ${IC.hp}`;
       case 'blk': {
         const v = f.v + owner.dex;
         return `+${num(v, owner.dex > 0)} ${IC.blk}`;
