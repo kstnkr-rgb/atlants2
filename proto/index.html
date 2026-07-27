@@ -1104,6 +1104,14 @@ if (!lsGet(SEED_KEY)) {
   lsSet(SEED_KEY, '1');
   storeDecks();
 }
+// стартовая колода — обычная редактируемая колода, добавляется один раз в начало списка
+const STARTER_SEED = 'atlanteans_starter_v1';
+if (!lsGet(STARTER_SEED)) {
+  if (!decks.some(d => d.starter))
+    decks.unshift({ name: 'Стартовая колода', cards: STARTER_DECK.slice(), starter: true });
+  lsSet(STARTER_SEED, '1');
+  storeDecks();
+}
 let chosenMe = -1;     // -1 — случайная колода
 let chosenFoe = -1;    // колода соперника (для отладки можно задать точно)
 
@@ -1120,19 +1128,15 @@ function pickBtns(idx) {
 }
 function renderStart() {
   const rows = [`<div class="ss-item">
-      <span class="ss-name">Стартовая колода</span><span class="ss-badge">СТАРТ</span>
-      <span class="ss-info">${STARTER_DECK.length} базовых карт</span>
-      ${pickBtns(-2)}</div>`,
-    `<div class="ss-item">
       <span class="ss-name">Случайная колода</span>
       <span class="ss-info">${DECK_SIZE} карт наугад</span>
       ${pickBtns(-1)}</div>`];
   decks.forEach((d, i) => rows.push(`<div class="ss-item">
-      <span class="ss-name">${d.name}</span>
+      <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
       <span class="ss-info">${d.cards.length} карт</span>
       ${pickBtns(i)}
       <button class="btn ghost" data-edit="${i}" style="padding:8px 18px;font-size:22px">изменить</button>
-      <button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>
+      ${d.starter ? '' : `<button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>`}
     </div>`));
   $('ssList').innerHTML = rows.join('');
 }
@@ -1154,7 +1158,7 @@ $('ssList').addEventListener('click', e => {
     renderStart();
   }
 });
-const deckAt = i => (i === -2 ? STARTER_DECK.slice() : i >= 0 ? decks[i].cards : null);
+const deckAt = i => (i >= 0 ? decks[i].cards : null);
 $('ssPlay').onclick = () => {
   showScreen(null);
   newGame(deckAt(chosenMe), deckAt(chosenFoe));
@@ -1185,7 +1189,7 @@ function renderEditor() {
       const n = edDeck.filter(x => x === k).length;
       const full = n >= MAX_COPIES;
       return `<div class="mini${full ? ' maxed' : ''}" data-add="${k}" title="${full ? 'уже 3 в колоде' : 'добавить'}">
-        ${cardHTML(k)}${n ? `<div class="mini-count">${n}/${MAX_COPIES}</div>` : ''}</div>`;
+        ${cardHTML(k)}${n ? `<div class="mini-count">×${n}</div>` : ''}</div>`;
     }).join('');
   $('edSave').disabled = edDeck.length === 0;
 }
@@ -1243,6 +1247,7 @@ $('edSave').onclick = () => {
   if (!edDeck.length) return;
   const name = ($('edName').value || '').trim() || `Колода ${decks.length + 1}`;
   const deck = { name, cards: edDeck.slice() };
+  if (edIndex >= 0 && decks[edIndex].starter) deck.starter = true;   // стартовая остаётся стартовой
   if (edIndex >= 0) decks[edIndex] = deck; else { decks.push(deck); edIndex = decks.length - 1; }
   storeDecks();
   chosenMe = edIndex;
