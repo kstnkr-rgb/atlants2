@@ -178,6 +178,14 @@ vm.runInContext(script + `
   check('пресеты собраны из настоящих карт',
         pre.slice(0,3).every(d => d.cards.every(k => k in ctx.__DB)));
 
+  // явно заданная колода соперника (выбор «врагу» для отладки)
+  const foeCards = ['d22', 'd22', 'm13', 'a9'];
+  ctx.__newGame(my, foeCards);
+  const G2 = ctx.__get();
+  check('сопернику можно задать колоду явно',
+        JSON.stringify(mine(G2.p[1])) === JSON.stringify(foeCards.slice().sort()), mine(G2.p[1]).join(','));
+  check('игрок сохранил свою колоду', JSON.stringify(mine(G2.p[0])) === JSON.stringify(my.slice().sort()));
+
   ctx.__newGame(null);
   check('без колоды набирается случайная из 20', ctx.__DECKnow().length === 20, String(ctx.__DECKnow().length));
   check('случайная колода из настоящих карт', ctx.__DECKnow().every(k => k in ctx.__DB));

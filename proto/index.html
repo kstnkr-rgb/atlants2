@@ -72,6 +72,14 @@
   .ic-nrg { display:inline-block; width:1em; height:0.62em; background:#43BEF3;
     border-radius:2px; vertical-align:0.02em; }
   .ic-hp { color:#c0392b; font-weight:700; }
+  /* индикатор переноса блока/энергии: иконка параметра + число ходов */
+  .transfer { position:absolute; width:280px; height:40px; display:flex; gap:16px;
+    align-items:center; }
+  .transfer .tr { display:inline-flex; align-items:center; gap:5px; background:rgba(0,0,0,.45);
+    border-radius:20px; padding:3px 12px 3px 8px; font-size:24px; font-weight:700; color:#fff;
+    text-shadow:0 2px 4px #000; }
+  .transfer .tr .arrow { color:#8fe0ff; font-size:22px; }
+  .transfer .ic { height:26px; vertical-align:-6px; }
 
   .card.inhand { cursor:grab; transition:transform .18s ease, top .25s ease, left .25s ease; }
   .card.inhand:hover { transform:translateY(-38px); }
@@ -212,7 +220,12 @@
     background:rgba(255,255,255,.07); border:3px solid transparent; cursor:pointer; }
   .ss-item.sel { border-color:#D9A847; background:rgba(217,168,71,.16); }
   .ss-item .ss-name { font-size:32px; font-weight:600; color:#fff; }
-  .ss-item .ss-info { margin-left:auto; font-size:24px; color:#a7b4c0; }
+  .ss-item .ss-info { font-size:24px; color:#a7b4c0; }
+  .ss-item .pick-cell { margin-left:auto; display:flex; gap:10px; }
+  .pick-side { border:3px solid #3a4654; background:rgba(255,255,255,.06); color:#c3ced9;
+    border-radius:12px; padding:10px 22px; font-size:24px; font-weight:700; cursor:pointer; }
+  .pick-side[data-side="me"].on  { background:#D9A847; color:#231803; border-color:#D9A847; }
+  .pick-side[data-side="foe"].on { background:#c0563e; color:#fff; border-color:#c0563e; }
   #startScreen .ss-actions { flex:0 0 auto; display:flex; gap:20px; justify-content:center;
     margin-top:34px; }
 
@@ -305,6 +318,7 @@
   <div class="val" id="blkZ" style="left:330px;top:299px;width:61px;height:34px;font-size:26px">0</div>
   <div class="val" id="strZ" style="left:383px;top:299px;width:48px;height:34px;font-size:26px">0</div>
   <div class="val" id="dexZ" style="left:431px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+  <div class="transfer" id="trZ" style="left:80px;top:342px"></div>
 
   <!-- АФИНА -->
   <div class="hpwrap" style="left:1723.2px;top:120.8px">
@@ -329,6 +343,7 @@
   <div class="val" id="blkA" style="left:2195px;top:299px;width:61px;height:34px;font-size:26px">0</div>
   <div class="val" id="strA" style="left:2155px;top:299px;width:48px;height:34px;font-size:26px">0</div>
   <div class="val" id="dexA" style="left:2107px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+  <div class="transfer" id="trA" style="left:2237px;top:342px;justify-content:flex-end"></div>
 
   <div id="turnNo">ХОД 1</div>
   <div id="roomCode">ПРОТОТИП ДУЭЛИ</div>
@@ -556,10 +571,12 @@ let lastDeck = null;
 function foeDeck() {
   return decks.length ? decks[Math.random() * decks.length | 0].cards.slice() : buildDeck();
 }
-function newGame(deckKeys) {
+let lastFoe = null;
+function newGame(deckKeys, foeKeys) {
   lastDeck = deckKeys && deckKeys.length ? deckKeys.slice() : null;
+  lastFoe  = foeKeys  && foeKeys.length  ? foeKeys.slice()  : null;
   DECK = lastDeck || buildDeck();
-  const foe = foeDeck();
+  const foe = lastFoe || foeDeck();
   S = { p:[mkPlayer('ZEUS', DECK), mkPlayer('APHINA', foe)], cur:0, turn:1, winner:null, busy:false };
   logBox.innerHTML = '';
   logMsg(`— новый бой, колода ${DECK_SIZE} карт —`, 'turn');
@@ -806,6 +823,14 @@ async function resolveCard(actorIdx, key) {
 const handEls = [];
 const PIP_STEP = 84, PIP_TOP = 185.8, PIP_Z_X = 323.2, PIP_A_X = 2183.2;
 
+function renderTransfer(boxId, p) {
+  const parts = [];
+  // «→ 🛡 N» — блок переносится ещё N ходов; так же для энергии
+  if (p.trBlock > 0) parts.push(`<span class="tr"><span class="arrow">→</span>${IC.blk}${p.trBlock}</span>`);
+  if (p.trNrg > 0)   parts.push(`<span class="tr"><span class="arrow">→</span>${IC.nrg}${p.trNrg}</span>`);
+  $(boxId).innerHTML = parts.join('');
+}
+
 function renderPips(boxId, energy, side) {
   const box = $(boxId);
   const slots = Math.max(MAX_NRG, energy);   // энергия сверх максимума добавляет сектора
@@ -834,6 +859,9 @@ function render() {
 
   $('blkZ').textContent = P.block; $('strZ').textContent = P.str; $('dexZ').textContent = P.dex;
   $('blkA').textContent = A.block; $('strA').textContent = A.str; $('dexA').textContent = A.dex;
+
+  renderTransfer('trZ', P);
+  renderTransfer('trA', A);
 
   $('pileDraw').textContent = P.draw.length;
   $('pileDisc').textContent = P.disc.length;
@@ -1033,7 +1061,7 @@ function finishTurn(who) {
 }
 
 $('btnEnd').onclick = () => { if (S.cur === 0 && !S.busy && S.winner === null) finishTurn(0); };
-$('btnAgain').onclick = () => { $('over').classList.remove('show'); newGame(lastDeck); };
+$('btnAgain').onclick = () => { $('over').classList.remove('show'); newGame(lastDeck, lastFoe); };
 
 /* ---------- хранение колод ---------- */
 const DECKS_KEY = 'atlanteans_decks';
@@ -1068,39 +1096,55 @@ if (!lsGet(SEED_KEY)) {
   lsSet(SEED_KEY, '1');
   storeDecks();
 }
-let chosen = -1;                 // -1 — случайная колода
+let chosenMe = -1;     // -1 — случайная колода
+let chosenFoe = -1;    // колода соперника (для отладки можно задать точно)
 
 /* ---------- стартовый экран ---------- */
 const startScreen = $('startScreen'), deckEditor = $('deckEditor');
 const showScreen = el => { $('startScreen').classList.remove('show');
   $('deckEditor').classList.remove('show'); if (el) el.classList.add('show'); };
 
+// кнопки выбора «мне» / «врагу» на каждой строке
+function pickBtns(idx) {
+  const b = (side, cur, label) =>
+    `<button class="pick-side${cur === idx ? ' on' : ''}" data-side="${side}" data-idx="${idx}">${label}</button>`;
+  return `<span class="pick-cell">${b('me', chosenMe, 'мне')}${b('foe', chosenFoe, 'врагу')}</span>`;
+}
 function renderStart() {
-  const rows = [`<div class="ss-item${chosen === -1 ? ' sel' : ''}" data-pick="-1">
+  const rows = [`<div class="ss-item">
       <span class="ss-name">Случайная колода</span>
-      <span class="ss-info">${DECK_SIZE} карт наугад</span></div>`];
-  decks.forEach((d, i) => rows.push(`<div class="ss-item${chosen === i ? ' sel' : ''}" data-pick="${i}">
+      <span class="ss-info">${DECK_SIZE} карт наугад</span>
+      ${pickBtns(-1)}</div>`];
+  decks.forEach((d, i) => rows.push(`<div class="ss-item">
       <span class="ss-name">${d.name}</span>
       <span class="ss-info">${d.cards.length} карт</span>
-      <button class="btn ghost" data-del="${i}" style="padding:8px 20px;font-size:22px">✕</button>
+      ${pickBtns(i)}
+      <button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>
     </div>`));
   $('ssList').innerHTML = rows.join('');
 }
 $('ssList').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) {
-    decks.splice(+del.dataset.del, 1); storeDecks();
-    if (chosen >= decks.length) chosen = -1;
+    const i = +del.dataset.del;
+    decks.splice(i, 1); storeDecks();
+    if (chosenMe >= decks.length) chosenMe = -1;
+    if (chosenFoe >= decks.length) chosenFoe = -1;
     renderStart(); return;
   }
-  const pick = e.target.closest('[data-pick]');
-  if (pick) { chosen = +pick.dataset.pick; renderStart(); }
+  const side = e.target.closest('[data-side]');
+  if (side) {
+    const idx = +side.dataset.idx;
+    if (side.dataset.side === 'me') chosenMe = idx; else chosenFoe = idx;
+    renderStart();
+  }
 });
+const deckAt = i => (i >= 0 ? decks[i].cards : null);
 $('ssPlay').onclick = () => {
   showScreen(null);
-  newGame(chosen >= 0 ? decks[chosen].cards : null);
+  newGame(deckAt(chosenMe), deckAt(chosenFoe));
 };
-$('ssEdit').onclick = () => { openEditor(chosen >= 0 ? decks[chosen] : null); };
+$('ssEdit').onclick = () => { openEditor(chosenMe >= 0 ? decks[chosenMe] : null); };
 
 /* ---------- редактор колод ---------- */
 let edDeck = [], edIndex = -1;
@@ -1179,7 +1223,7 @@ $('edSave').onclick = () => {
   const deck = { name, cards: edDeck.slice() };
   if (edIndex >= 0) decks[edIndex] = deck; else { decks.push(deck); edIndex = decks.length - 1; }
   storeDecks();
-  chosen = edIndex;
+  chosenMe = edIndex;
   renderStart();
   showScreen(startScreen);
 };
