@@ -539,7 +539,8 @@ function cardDesc(c, owner) {
 const NEUTRAL = { str: 0, dex: 0 };
 function cardInner(key, owner) {
   const c = DB[key];
-  return `<img class="art" src="img/card.png">
+  // арт карты из атласов игры (img/cards/<ключ>.png), с запасным вариантом
+  return `<img class="art" src="img/cards/${key}.png" onerror="this.onerror=null;this.src='img/card.png'">
      <div class="edge" style="border-color:${EDGE[c.type]}"></div>
      <div class="cost">${c.cost}</div>
      <div class="title">${c.title}</div>
