@@ -132,7 +132,7 @@ vm.runInContext(script + `
   P.str = 0;
 
   // дебафф силы/ловкости держится ровно один ход жертвы
-  P.str = 5; P.dex = 3; P.deb.str = 0; P.deb.dex = 0; P.debWait.str = 0; P.debWait.dex = 0;
+  P.str = 5; P.dex = 3; P.debuffs = [];
   await runFx(1, 'm16');                      // «Проклятие Зевса»: соперник снимает 5 силы
   check('дебафф применился', P.str === 0, String(P.str));
   ctx.__start(0);
@@ -141,11 +141,22 @@ vm.runInContext(script + `
   check('дебафф спал на следующий ход', P.str === 5, String(P.str));
 
   // нижней границы нет: сила уходит в минус и полностью возвращается
-  P.str = 2; P.deb.str = 0; P.debWait.str = 0;
+  P.str = 2; P.debuffs = [];
   await runFx(1, 'm16');                      // -5 при силе 2
   check('сила уходит в минус', P.str === -3, String(P.str));
   ctx.__start(0); ctx.__start(0);
   check('вернулось всё снятое', P.str === 2, String(P.str));
+
+  // каждый дебафф живёт свой срок: наложенный позже не продлевает ранний
+  P.str = 10; P.debuffs = [];
+  await runFx(1, 'm16');                      // ход 1: −5
+  ctx.__start(0);                             // прошёл ход жертвы, ранний созрел
+  await runFx(1, 'a19');                      // ход 2: −1 (наложен, пока ранний не спал)
+  check('оба дебаффа наложены', P.str === 4, String(P.str));
+  ctx.__start(0);                             // ранний (−5) должен вернуться сейчас
+  check('ранний дебафф спал вовремя', P.str === 9, String(P.str));
+  ctx.__start(0);                             // теперь возвращается поздний (−1)
+  check('поздний дебафф спал своим сроком', P.str === 10, String(P.str));
 
   // зелёная подсветка бонусов
   const dmgCard = ctx.__DB.a8, blkCard = ctx.__DB.d22;
@@ -190,9 +201,13 @@ vm.runInContext(script + `
   check('без колоды набирается случайная из 20', ctx.__DECKnow().length === 20, String(ctx.__DECKnow().length));
   check('случайная колода из настоящих карт', ctx.__DECKnow().every(k => k in ctx.__DB));
 
-  // полная партия
+  // полная партия — детерминированная агрессивная колода у обоих,
+  // чтобы бой гарантированно завершался (случайные колоды с копиями и
+  // переносом энергии могут не сходиться — это артефакт жадного алгоритма)
+  const rush = ctx.__decks().find(d => d.name === 'Натиск').cards;
+  ctx.__newGame(rush, rush);
   let turns = 0;
-  while (ctx.__get().winner === null && turns < 4000) {
+  while (ctx.__get().winner === null && turns < 400) {
     const S = ctx.__get();
     if (S.cur === 0 && !S.busy) {
       const p = S.p[0];

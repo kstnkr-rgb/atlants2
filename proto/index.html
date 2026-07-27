@@ -366,7 +366,7 @@
   <div class="ss-list" id="ssList"></div>
   <div class="ss-actions">
     <button class="btn" id="ssPlay">ИГРАТЬ</button>
-    <button class="btn ghost" id="ssEdit">РЕДАКТОР КОЛОД</button>
+    <button class="btn ghost" id="ssEdit">НОВАЯ КОЛОДА</button>
   </div>
 </div>
 
@@ -562,8 +562,7 @@ let S;
 function mkPlayer(name, deckKeys) {
   return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
            trBlock:0, trNrg:0,            // счётчики переноса блока и энергии
-           deb:{ str:0, dex:0 },          // сколько силы/ловкости снято дебаффом
-           debWait:{ str:0, dex:0 },      // сколько своих ходов дебафф ещё держится
+           debuffs:[],                    // активные дебаффы: {stat, amount, wait} — каждый со своим сроком
            draw:shuffle(deckKeys).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
 }
 let lastDeck = null;
@@ -600,14 +599,16 @@ function startTurn(i) {
   else { blockNote = p.block ? `сгорел ${p.block}` : 'нет'; p.block = 0; }
   if (p.trNrg > 0) { p.energy += MAX_NRG; p.trNrg--; }  // энергия копится
   else p.energy = MAX_NRG;
-  for (const s of ['str', 'dex']) {     // дебафф силы/ловкости действует один ход
-    if (p.debWait[s] > 0) p.debWait[s]--;
-    else if (p.deb[s] > 0) {
-      const back = p.deb[s];
-      p[s] += back; p.deb[s] = 0;
-      logMsg(`  дебафф спал: ${s === 'str' ? 'сила' : 'ловкость'} +${back} → ${p[s]} (${p.name})`, 'turn');
+  // каждый дебафф доживает свой срок независимо от остальных
+  const staying = [];
+  for (const d of p.debuffs) {
+    if (d.wait > 0) { d.wait--; staying.push(d); }
+    else {
+      p[d.stat] += d.amount;
+      logMsg(`  дебафф спал: ${d.stat === 'str' ? 'сила' : 'ловкость'} +${d.amount} → ${p[d.stat]} (${p.name})`, 'turn');
     }
   }
+  p.debuffs = staying;
   const need = HAND_SIZE - p.hand.length;
   drawCards(p, need);
   logMsg(`  ${p.name}: блок ${blockNote}, энергия ${p.energy}, добор ${need} → рука ${p.hand.length}, ` +
@@ -717,8 +718,8 @@ function bump(who, stat, delta, side, label, byFoe) {
   who[stat] = before + delta;           // нижней границы нет: сила и ловкость уходят в минус
   const real = who[stat] - before;
   if (real < 0) {                       // дебафф временный: снятое вернётся владельцу
-    who.deb[stat] += -real;
-    who.debWait[stat] = byFoe ? 1 : 0;  // чужой доживает до конца хода жертвы
+    // отдельная запись со своим сроком; чужой доживает до конца хода жертвы
+    who.debuffs.push({ stat, amount: -real, wait: byFoe ? 1 : 0 });
   }
   if (real !== 0) popup(side, label + ' ' + sign(real), 'buff');
 }
@@ -1119,6 +1120,7 @@ function renderStart() {
       <span class="ss-name">${d.name}</span>
       <span class="ss-info">${d.cards.length} карт</span>
       ${pickBtns(i)}
+      <button class="btn ghost" data-edit="${i}" style="padding:8px 18px;font-size:22px">изменить</button>
       <button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>
     </div>`));
   $('ssList').innerHTML = rows.join('');
@@ -1132,6 +1134,8 @@ $('ssList').addEventListener('click', e => {
     if (chosenFoe >= decks.length) chosenFoe = -1;
     renderStart(); return;
   }
+  const edit = e.target.closest('[data-edit]');
+  if (edit) { openEditor(decks[+edit.dataset.edit]); return; }
   const side = e.target.closest('[data-side]');
   if (side) {
     const idx = +side.dataset.idx;
@@ -1144,7 +1148,7 @@ $('ssPlay').onclick = () => {
   showScreen(null);
   newGame(deckAt(chosenMe), deckAt(chosenFoe));
 };
-$('ssEdit').onclick = () => { openEditor(chosenMe >= 0 ? decks[chosenMe] : null); };
+$('ssEdit').onclick = () => { openEditor(null); };   // новая колода с чистого листа
 
 /* ---------- редактор колод ---------- */
 let edDeck = [], edIndex = -1;
