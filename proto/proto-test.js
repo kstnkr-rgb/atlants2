@@ -77,6 +77,7 @@ vm.runInContext(script + `
     if (!cond) fails++;
   };
 
+  ctx.__newGame();   // бой при загрузке больше не стартует — запускаем явно
   const S0 = ctx.__get();
   const all = p => [...p.draw, ...p.hand, ...p.disc, ...p.exh].map(c => c.key).sort();
   const TEMP = ['bolt','twin','thunder','aegis','winds','wrath','grace','ambrosia','insight','spark'];
@@ -84,8 +85,8 @@ vm.runInContext(script + `
   check('в базе 84 карты из конфига', Object.keys(ctx.__DB).length === 84, String(Object.keys(ctx.__DB).length));
   check('временных карт не осталось', !TEMP.some(k => k in ctx.__DB));
   check('колода соперника из настоящих карт', all(S0.p[1]).every(k => k in ctx.__DB));
-  check('в колоде 20 карт', ctx.__DECK.length === 20, String(ctx.__DECK.length));
-  check('колода набрана из настоящих карт', ctx.__DECK.every(k => k in ctx.__DB));
+  check('в колоде 20 карт', ctx.__DECKnow().length === 20, String(ctx.__DECKnow().length));
+  check('колода набрана из настоящих карт', ctx.__DECKnow().every(k => k in ctx.__DB));
   check('старт: 50 HP у обоих', S0.p[0].hp === 50 && S0.p[1].hp === 50);
   check('старт: 3 энергии', S0.p[0].energy === 3);
   check('старт: рука 5 карт', S0.p[0].hand.length === 5, String(S0.p[0].hand.length));
@@ -205,7 +206,7 @@ vm.runInContext(script + `
 
   // стартовая колода и лимит копий
   check('лимит копий = 3', ctx.__MAX === 3, String(ctx.__MAX));
-  check('стартовая колода из конфига (10 карт)', ctx.__STARTER.length === 10, String(ctx.__STARTER.length));
+  check('стартовая колода 20 карт', ctx.__STARTER.length === 20, String(ctx.__STARTER.length));
   check('стартовая колода из настоящих карт', ctx.__STARTER.every(k => k in ctx.__DB));
   check('4 базовые карты вернулись (a1,a5,d2,d4)', ['a1','a5','d2','d4'].every(k => k in ctx.__DB));
 

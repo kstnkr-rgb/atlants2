@@ -35,7 +35,7 @@
     display:flex; align-items:center; justify-content:center; font-weight:700; }
 
   .hpwrap { position:absolute; width:667px; height:53px; }
-  .hpempty { position:absolute; inset:0; background:rgba(0,0,0,.5); border-radius:8px; }
+  .hpempty { position:absolute; inset:0; border-radius:8px; }
   .hpclip { position:absolute; top:0; bottom:0; left:0; overflow:hidden; transition:width .35s ease; }
   .hpclip.right { left:auto; right:0; }
   .hpclip img { top:0; }
@@ -1250,7 +1250,7 @@ $('edSave').onclick = () => {
   showScreen(startScreen);
 };
 
-newGame();
+// бой НЕ запускаем при загрузке — только после выбора колоды на стартовом экране
 renderStart();
 showScreen(startScreen);
 </script>
