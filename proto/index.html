@@ -815,8 +815,23 @@ async function resolveCard(actorIdx, key) {
                `, колода ${me.draw.length}, сброс ${me.disc.length}`;
         break;
       }
-      case 'trBlock': me.trBlock += f.v; popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk'); note = `перенос блока на ${f.v} х. (счётчик ${me.trBlock})`; break;
-      case 'trNrg':   me.trNrg += f.v;   popup(actorIdx, 'ЭНЕРГИЯ ПЕРЕНОС', 'buff'); note = `перенос энергии на ${f.v} х. (счётчик ${me.trNrg})`; break;
+      // переносы НЕ суммируются: счётчик не складывается, а берётся больший из двух
+      case 'trBlock': {
+        const was = me.trBlock;
+        me.trBlock = Math.max(was, f.v);
+        popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk');
+        note = `перенос блока на ${f.v} х. → счётчик ${me.trBlock}` +
+               (was && f.v <= was ? ' (не суммируется, уже больше)' : '');
+        break;
+      }
+      case 'trNrg': {
+        const was = me.trNrg;
+        me.trNrg = Math.max(was, f.v);
+        popup(actorIdx, 'ЭНЕРГИЯ ПЕРЕНОС', 'buff');
+        note = `перенос энергии на ${f.v} х. → счётчик ${me.trNrg}` +
+               (was && f.v <= was ? ' (не суммируется, уже больше)' : '');
+        break;
+      }
 
       // копия карты из руки: в прототипе берётся случайная (выбор игроком не сделан)
       case 'copyHand':
@@ -1131,43 +1146,37 @@ function loadDecks() {
 function storeDecks() {
   try { localStorage.setItem(DECKS_KEY, JSON.stringify(decks)); } catch (e) {}
 }
+// пресеты заданы заказчиком кодами колод (ATL1:...)
 const PRESETS = [
-  { name: 'Натиск', cards: [
-      'a9','a9','a8','a8','a11','a11','a2','a2','a21','a26','a26',
-      'a6','a6','a14','a14','a4','m13','m14','a3','a3' ] },
-  { name: 'Оборона', cards: [
-      'd22','d25','d25','d21','d21','d12','d12','d13','d6','d6',
-      'd28','d28','d9','d9','d18','d17','d27','d27','d23','d23' ] },
-  { name: 'Энергия', cards: [
-      'm28','m28','m27','m26','m26','m19','m19','d11','d11','d8','d8',
-      'a13','a13','m7','a6','a6','m10','m10','m22','a17' ] },
+  { name: 'Натиск+', cards: [
+      'a9','a9','a8','a11','a11','a2','a2','a21','a26','a26',
+      'a14','a14','a4','m13','m14','d5','d1','d10','d24','d22' ] },
+  { name: 'Оборона +', cards: [
+      'd22','d25','d21','d12','d13','d6','d28','d28','d18','d17',
+      'd27','d23','m25','m19','a28','a24','a21','a2','a7','a28' ] },
+  { name: 'Энергия +', cards: [
+      'm28','m27','m26','d11','m7','a6','m10','m10','m22','a17',
+      'a20','a21','d12','d14','d7','d9','d5','d3','d1','a7' ] },
 ];
+const OLD_PRESET_NAMES = ['Натиск', 'Оборона', 'Энергия'];   // заменены версиями «+»
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
 let decks = loadDecks();
-// пресеты добавляются один раз и не зависят от того, есть ли уже свои колоды;
-// после этого удаление пресета остаётся в силе
-const SEED_KEY = 'atlanteans_presets_v1';
+// Пресеты и стартовая колода засеваются один раз. Версия ключа поднимается,
+// когда заказчик меняет составы: тогда старые пресеты убираются, новые ставятся,
+// а собственные колоды игрока остаются нетронутыми.
+const SEED_KEY = 'atlanteans_presets_v2';
 if (!lsGet(SEED_KEY)) {
-  PRESETS.forEach(pr => {
-    if (!decks.some(d => d.name === pr.name)) decks.push({ name: pr.name, cards: pr.cards.slice() });
-  });
+  decks = decks.filter(d => !OLD_PRESET_NAMES.includes(d.name) && !PRESETS.some(p => p.name === d.name));
+  PRESETS.forEach(pr => decks.push({ name: pr.name, cards: pr.cards.slice() }));
+
+  const st = decks.find(d => d.starter);
+  if (st) st.cards = STARTER_DECK.slice();      // обновить состав стартовой
+  else decks.unshift({ name: 'Стартовая колода', cards: STARTER_DECK.slice(), starter: true });
+
   lsSet(SEED_KEY, '1');
   storeDecks();
-}
-// стартовая колода — обычная редактируемая колода, добавляется один раз в начало списка
-const STARTER_SEED = 'atlanteans_starter_v1';
-if (!lsGet(STARTER_SEED)) {
-  if (!decks.some(d => d.starter))
-    decks.unshift({ name: 'Стартовая колода', cards: STARTER_DECK.slice(), starter: true });
-  lsSet(STARTER_SEED, '1');
-  storeDecks();
-}
-// миграция: старая стартовая колода была из 10 карт — дополняем до 20 дублированием
-{
-  const st = decks.find(d => d.starter);
-  if (st && st.cards.length === 10) { st.cards = STARTER_DECK.slice(); storeDecks(); }
 }
 let chosenMe = -1;     // -1 — случайная колода
 let chosenFoe = -1;    // колода соперника (для отладки можно задать точно)

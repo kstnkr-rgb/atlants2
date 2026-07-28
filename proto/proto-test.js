@@ -186,7 +186,7 @@ vm.runInContext(script + `
   // пресеты
   const pre = ctx.__decks();
   check('три пресета созданы', pre.length >= 3, String(pre.length));
-  check('пресеты названы', ['Натиск','Оборона','Энергия'].every(n => pre.some(d => d.name === n)),
+  check('пресеты названы', ['Натиск+','Оборона +','Энергия +'].every(n => pre.some(d => d.name === n)),
         pre.map(d => d.name).join(','));
   check('в каждом пресете 20 карт', pre.slice(0,3).every(d => d.cards.length === 20),
         pre.slice(0,3).map(d => d.cards.length).join(','));
@@ -210,6 +210,23 @@ vm.runInContext(script + `
   check('стартовая колода 20 карт', ctx.__STARTER.length === 20, String(ctx.__STARTER.length));
   check('стартовая колода из настоящих карт', ctx.__STARTER.every(k => k in ctx.__DB));
   check('4 базовые карты вернулись (a1,a5,d2,d4)', ['a1','a5','d2','d4'].every(k => k in ctx.__DB));
+
+  // переносы не суммируются: счётчик берёт больший, а не складывает
+  const Tp = ctx.__get().p[0];   // после newGame объект игрока другой — берём актуальный
+  Tp.trBlock = 0; Tp.trNrg = 0;
+  await runFx(0, 'd6');                        // «Наручи Амазонок»: перенос блока на 1 ход
+  check('первый перенос ставит счётчик', Tp.trBlock === 1, String(Tp.trBlock));
+  await runFx(0, 'd6');                        // ещё раз тот же перенос
+  check('повторный перенос не суммируется', Tp.trBlock === 1, String(Tp.trBlock));
+  await runFx(0, 'm24');                       // «Сделка с Гефестом»: перенос блока на 10 ходов
+  check('более длинный перенос поднимает счётчик', Tp.trBlock === 10, String(Tp.trBlock));
+  await runFx(0, 'd6');                        // короткий перенос поверх длинного
+  check('короткий перенос не сбивает длинный', Tp.trBlock === 10, String(Tp.trBlock));
+
+  Tp.trNrg = 0;
+  await runFx(0, 'm28');                       // «Сделка с Гермесом»: перенос энергии 1 ход
+  await runFx(0, 'm28');
+  check('перенос энергии тоже не суммируется', Tp.trNrg === 1, String(Tp.trNrg));
 
   // порядок карт: атака -> защита -> магия, внутри по стоимости
   const mix = ['m10','d22','a21','a4','d18','m13','a1'];
@@ -244,7 +261,7 @@ vm.runInContext(script + `
   // полная партия — детерминированная агрессивная колода у обоих,
   // чтобы бой гарантированно завершался (случайные колоды с копиями и
   // переносом энергии могут не сходиться — это артефакт жадного алгоритма)
-  const rush = ctx.__decks().find(d => d.name === 'Натиск').cards;
+  const rush = ctx.__decks().find(d => d.name === 'Натиск+').cards;
   ctx.__newGame(rush, rush);
   let turns = 0;
   while (ctx.__get().winner === null && turns < 400) {

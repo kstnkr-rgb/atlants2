@@ -106,10 +106,8 @@ const CARDS = {
 
 const CARD_KEYS = Object.keys(CARDS);
 
-// стартовая колода из Remote Config (startDeck), продублирована до 20 карт
-// (оригинал 10: Копьё×4, Щит×4, Ксифос×1, Гоплон×1 — каждая удвоена)
-const STARTER_DECK = ['a1','a1','a1','a1','a1','a1','a1','a1',
-                      'd4','d4','d4','d4','d4','d4','d4','d4',
-                      'a5','a5','d2','d2'];
+// стартовая колода, задана заказчиком (код ATL1:Стартовая колода:1,1,1,32,...)
+const STARTER_DECK = ['a1','a1','a1','d4','d4','d4','d4','d4','a5','a5',
+                      'd2','d2','m8','m16','a3','a12','d6','d9','a4','a18'];
 
 if (typeof module !== 'undefined') module.exports = { CARDS, CARD_KEYS, STARTER_DECK };
