@@ -78,12 +78,13 @@
     border-radius:2px; vertical-align:0.02em; }
   .ic-hp { color:#c0392b; font-weight:700; }
   /* баффы и дебаффы: показываются только когда значение не ноль */
-  .stats { position:absolute; width:400px; height:74px; display:flex; gap:14px;
+  .stats { position:absolute; width:400px; height:74px; display:flex; gap:22px;
     align-items:center; }
-  .stats .stchip { display:flex; align-items:center; gap:7px; }
-  .stats .stchip img { position:static; width:62px; height:62px; }
+  .stats .stchip { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  /* #stage img задан absolute и бьёт классы по специфичности — возвращаем в поток через #stage */
+  #stage .stats .stchip img { position:static; width:62px; height:62px; flex:0 0 auto; }
   .stats .stchip b { font-size:34px; font-weight:800; color:#fff;
-    text-shadow:0 2px 5px rgba(0,0,0,.9); }
+    text-shadow:0 2px 5px rgba(0,0,0,.9); line-height:1; }
 
   /* индикатор переноса блока/энергии: иконка параметра + число ходов */
   .transfer { position:absolute; width:280px; height:40px; display:flex; gap:16px;
@@ -93,6 +94,13 @@
     text-shadow:0 2px 4px #000; }
   .transfer .tr .arrow { color:#8fe0ff; font-size:22px; }
   .transfer .ic { height:26px; vertical-align:-6px; }
+
+  #pendLabel { position:absolute; left:0; width:2597px; top:498px; text-align:center;
+    font-size:34px; font-weight:700; letter-spacing:3px; color:#7ee0ff;
+    text-shadow:0 3px 6px rgba(0,0,0,.9); display:none; }
+  #pendLabel.show { display:block; }
+  .card.pend { cursor:pointer; filter:drop-shadow(0 0 18px rgba(126,224,255,.75)); }
+  .card.pend:hover { transform:translateY(-22px); }
 
   .card.inhand { cursor:grab; transition:transform .18s ease, top .25s ease, left .25s ease; }
   .card.inhand:hover { transform:translateY(-38px); }
@@ -396,6 +404,8 @@
     <div class="dv-list" id="dvList"></div>
   </div>
 
+  <div id="pendLabel">НОВЫЕ КАРТЫ — НАЖМИТЕ, ЧТОБЫ ВЗЯТЬ В РУКУ</div>
+
   <div id="dropzone"><div class="hint">СЫГРАТЬ КАРТУ</div></div>
   <div id="played"></div>
 
@@ -574,6 +584,7 @@ function mkPlayer(name, deckKeys) {
   return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
            trBlock:0, trNrg:0,            // счётчики переноса блока и энергии
            debuffs:[],                    // активные дебаффы: {stat, amount, wait} — каждый со своим сроком
+           pending:[],                    // новые карты: ждут над рукой, берутся кликом
            draw:shuffle(deckKeys).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
 }
 let lastDeck = null;
@@ -593,13 +604,13 @@ function newGame(deckKeys, foeKeys) {
   startTurn(0);
   render();
 }
-function drawCards(p, n) {
+function drawCards(p, n, toPending) {
   for (let i = 0; i < n; i++) {
     if (!p.draw.length) {
       if (!p.disc.length) return;
       p.draw = shuffle(p.disc); p.disc = [];
     }
-    p.hand.push(p.draw.pop());
+    (toPending ? p.pending : p.hand).push(p.draw.pop());
   }
 }
 // правила из PlayerBehaviour.RefreshStatsOnNewTurn оригинальной игры
@@ -666,6 +677,11 @@ $('logToggle').addEventListener('click', () => document.body.classList.toggle('n
 /* ---------- просмотр колоды ---------- */
 const deckView = $('deckView');
 const TYPE_ORDER = ['attack', 'defend', 'magic'];
+// единый порядок показа карт: сначала атака, потом защита, потом магия;
+// внутри группы — по стоимости от 0 до 3
+const byTypeCost = (ka, kb) =>
+  TYPE_ORDER.indexOf(DB[ka].type) - TYPE_ORDER.indexOf(DB[kb].type) ||
+  DB[ka].cost - DB[kb].cost || DB[ka].no - DB[kb].no;
 function showDeck() {
   const p = S.p[0];
   // колода показывается вместе с рукой; карты из руки помечаются
@@ -738,6 +754,7 @@ function bump(who, stat, delta, side, label, byFoe) {
 async function resolveCard(actorIdx, key) {
   const me = S.p[actorIdx], opp = S.p[1 - actorIdx], c = DB[key];
   const foe = 1 - actorIdx;
+  const toPend = actorIdx === 0;   // игроку новые карты кладём над рукой, боту — сразу в руку
 
   for (const f of c.fx) {
     let note = '';
@@ -793,9 +810,9 @@ async function resolveCard(actorIdx, key) {
 
       case 'nrg':     me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ ' + sign(f.v), 'buff'); note = `энергия ${sign(f.v)} → ${me.energy}`; break;
       case 'draw': {
-        const was = me.hand.length;
-        drawCards(me, f.v);
-        note = `добор ${f.v} → рука ${was} → ${me.hand.length}, колода ${me.draw.length}, сброс ${me.disc.length}`;
+        drawCards(me, f.v, toPend);
+        note = `добор ${f.v} → ${toPend ? 'новые карты ' + me.pending.length : 'рука ' + me.hand.length}` +
+               `, колода ${me.draw.length}, сброс ${me.disc.length}`;
         break;
       }
       case 'trBlock': me.trBlock += f.v; popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk'); note = `перенос блока на ${f.v} х. (счётчик ${me.trBlock})`; break;
@@ -805,13 +822,13 @@ async function resolveCard(actorIdx, key) {
       case 'copyHand':
         if (me.hand.length) {
           const src = me.hand[Math.random() * me.hand.length | 0];
-          me.hand.push({ uid: uid++, key: src.key });
-          note = `копия «${DB[src.key].title}» в руку → рука ${me.hand.length}`;
+          (toPend ? me.pending : me.hand).push({ uid: uid++, key: src.key });
+          note = `копия «${DB[src.key].title}» → ${toPend ? 'новые карты' : 'рука'}`;
         } else note = 'копия из руки: рука пуста';
         break;
       case 'copySelf':
-        me.hand.push({ uid: uid++, key });
-        note = `копия «${c.title}» в руку → рука ${me.hand.length}`;
+        (toPend ? me.pending : me.hand).push({ uid: uid++, key });
+        note = `копия «${c.title}» → ${toPend ? 'новые карты' : 'рука'}`;
         break;
       case 'copyDeck':
         if (me.draw.length) {
@@ -883,6 +900,7 @@ function render() {
   $('btnEnd').disabled = S.cur !== 0 || S.busy || S.winner !== null;
 
   renderHand();
+  renderPending();
 
   if (S.winner !== null) {
     $('overText').textContent = S.winner === 0 ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
@@ -896,7 +914,8 @@ function renderHand() {
   const P = S.p[0];
   handEls.forEach(e => e.remove());
   handEls.length = 0;
-  P.hand.forEach((card, i) => {
+  const shown = P.hand.slice().sort((a, b) => byTypeCost(a.key, b.key));
+  shown.forEach((card, i) => {
     const el = buildCardEl(card.key, P, true);
     const playable = S.cur === 0 && !S.busy && S.winner === null && DB[card.key].cost <= P.energy;
     if (!playable) el.classList.add('locked');
@@ -906,6 +925,36 @@ function renderHand() {
     if (playable) attachDrag(el, card);
     stage.appendChild(el);
     handEls.push(el);
+  });
+}
+
+const PEND_Y = 552;
+const pendEls = [];
+// новые карты ждут над рукой: клик переносит карту в руку
+function renderPending() {
+  const P = S.p[0];
+  pendEls.forEach(e => e.remove());
+  pendEls.length = 0;
+  $('pendLabel').classList.toggle('show', P.pending.length > 0);
+  if (!P.pending.length) return;
+
+  const n = P.pending.length;
+  const total = (n - 1) * HAND_STEP + 335;
+  const startX = (STAGE_W - total) / 2;
+  P.pending.slice().sort((a, b) => byTypeCost(a.key, b.key)).forEach((card, i) => {
+    const el = buildCardEl(card.key, P, false);
+    el.classList.add('pend');
+    el.style.left = (startX + i * HAND_STEP) + 'px';
+    el.style.top = PEND_Y + 'px';
+    el.addEventListener('click', () => {
+      if (S.busy) return;
+      P.pending = P.pending.filter(x => x.uid !== card.uid);
+      P.hand.push(card);
+      logMsg(`  взята новая карта «${DB[card.key].title}» → рука ${P.hand.length}`, 'you');
+      render();
+    });
+    stage.appendChild(el);
+    pendEls.push(el);
   });
 }
 
@@ -1058,8 +1107,8 @@ function chooseCard(options, me, opp) {
 /* ---------- смена хода ---------- */
 function finishTurn(who) {
   const p = S.p[who];
-  p.disc.push(...p.hand);          // рука уходит в сброс
-  p.hand = [];
+  p.disc.push(...p.hand, ...p.pending);   // рука и незабранные новые карты — в сброс
+  p.hand = []; p.pending = [];
   S.cur = 1 - who;
   if (S.cur === 0) S.turn++;
   logMsg(`— ход ${S.turn}: ${S.p[S.cur].name} —`, 'turn');
@@ -1184,15 +1233,16 @@ function openEditor(deck) {
 }
 function renderEditor() {
   $('edCount').textContent = `${edDeck.length} / ${DECK_SIZE}`;
-  let slots = '';
-  for (let i = 0; i < DECK_SIZE; i++) {
-    slots += edDeck[i]
-      ? `<div class="mini" data-slot="${i}" title="убрать">${cardHTML(edDeck[i])}</div>`
-      : '<div class="slot">+</div>';
-  }
+  // карты колоды показываются в том же порядке, что в руке: тип, затем стоимость;
+  // data-slot несёт исходный индекс, поэтому удаление работает после сортировки
+  const shown = edDeck.map((k, i) => ({ k, i }))
+                      .sort((a, b) => byTypeCost(a.k, b.k));
+  let slots = shown.map(({ k, i }) =>
+    `<div class="mini" data-slot="${i}" title="убрать">${cardHTML(k)}</div>`).join('');
+  for (let i = edDeck.length; i < DECK_SIZE; i++) slots += '<div class="slot">+</div>';
   $('edSlots').innerHTML = slots;
   $('edAvail').innerHTML = CARD_KEYS
-    .slice().sort((a, b) => DB[a].no - DB[b].no)
+    .slice().sort(byTypeCost)
     .map(k => {                       // счётчик копий: максимум MAX_COPIES одинаковых
       const n = edDeck.filter(x => x === k).length;
       const full = n >= MAX_COPIES;

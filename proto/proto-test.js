@@ -68,6 +68,7 @@ vm.runInContext(script + `
 ;globalThis.__decks = () => decks;
 ;globalThis.__MAX = MAX_COPIES;
 ;globalThis.__STARTER = STARTER_DECK;
+;globalThis.__byTypeCost = byTypeCost;
 `, ctx);
 
 (async () => {
@@ -209,6 +210,36 @@ vm.runInContext(script + `
   check('стартовая колода 20 карт', ctx.__STARTER.length === 20, String(ctx.__STARTER.length));
   check('стартовая колода из настоящих карт', ctx.__STARTER.every(k => k in ctx.__DB));
   check('4 базовые карты вернулись (a1,a5,d2,d4)', ['a1','a5','d2','d4'].every(k => k in ctx.__DB));
+
+  // порядок карт: атака -> защита -> магия, внутри по стоимости
+  const mix = ['m10','d22','a21','a4','d18','m13','a1'];
+  const sorted = mix.slice().sort(ctx.__byTypeCost);
+  const types = sorted.map(k => ctx.__DB[k].type);
+  check('порядок групп: атака, защита, магия',
+        JSON.stringify(types) === JSON.stringify(['attack','attack','attack','defend','defend','magic','magic']),
+        types.join(','));
+  const atk = sorted.filter(k => ctx.__DB[k].type === 'attack').map(k => ctx.__DB[k].cost);
+  check('внутри группы по возрастанию стоимости',
+        atk.every((c, i) => i === 0 || atk[i-1] <= c), atk.join(','));
+
+  // новые карты игрока ждут над рукой, у бота идут сразу в руку
+  const G3 = ctx.__get();
+  const Pl = G3.p[0], Bo = G3.p[1];
+  Pl.pending = []; Pl.hand = []; Pl.draw = ['a1','a1','a1'].map((k,i) => ({ uid: 7000+i, key: k }));
+  await runFx(0, 'm10');                       // «Подарок Посейдона»: выдаёт 2 карты
+  check('новые карты игрока попали в зону над рукой', Pl.pending.length === 2 && Pl.hand.length === 0,
+        `pending ${Pl.pending.length}, рука ${Pl.hand.length}`);
+
+  Bo.pending = []; Bo.hand = []; Bo.draw = ['a1','a1','a1'].map((k,i) => ({ uid: 7100+i, key: k }));
+  await runFx(1, 'm10');
+  check('у бота новые карты идут прямо в руку', Bo.hand.length === 2 && Bo.pending.length === 0,
+        `pending ${Bo.pending.length}, рука ${Bo.hand.length}`);
+
+  // незабранные новые карты уходят в сброс в конце хода
+  const discWas = Pl.disc.length;
+  ctx.__finish(0);
+  check('незабранные новые карты ушли в сброс',
+        Pl.pending.length === 0 && Pl.disc.length >= discWas + 2, `сброс ${Pl.disc.length}`);
 
   // полная партия — детерминированная агрессивная колода у обоих,
   // чтобы бой гарантированно завершался (случайные колоды с копиями и
