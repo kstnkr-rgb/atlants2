@@ -61,7 +61,7 @@
     font-size:23px; font-weight:600; color:#fff; line-height:1.1; }
   .card .desc { position:absolute; left:24px; top:288px; width:287px; height:112px;
     display:flex; flex-direction:column; align-items:flex-start; justify-content:center;
-    text-align:left; font-size:27px; font-weight:700; color:#3d2919; line-height:1.28; padding-left:12px; }
+    text-align:left; font-size:25px; font-weight:400; color:#3d2919; line-height:1.3; padding-left:12px; }
   .dline { white-space:nowrap; }
   .card .type { position:absolute; left:36px; top:398px; width:263px; height:46px;
     display:flex; align-items:center; justify-content:center;
@@ -77,6 +77,14 @@
   .ic-nrg { display:inline-block; width:1em; height:0.62em; background:#43BEF3;
     border-radius:2px; vertical-align:0.02em; }
   .ic-hp { color:#c0392b; font-weight:700; }
+  /* баффы и дебаффы: показываются только когда значение не ноль */
+  .stats { position:absolute; width:400px; height:74px; display:flex; gap:14px;
+    align-items:center; }
+  .stats .stchip { display:flex; align-items:center; gap:7px; }
+  .stats .stchip img { position:static; width:62px; height:62px; }
+  .stats .stchip b { font-size:34px; font-weight:800; color:#fff;
+    text-shadow:0 2px 5px rgba(0,0,0,.9); }
+
   /* индикатор переноса блока/энергии: иконка параметра + число ходов */
   .transfer { position:absolute; width:280px; height:40px; display:flex; gap:16px;
     align-items:center; }
@@ -320,12 +328,7 @@
   <img src="img/frame_z.svg" style="left:81.2px;top:48.8px">
   <div class="name" style="left:301.2px;top:57.8px">ZEUS</div>
   <div class="nrgpill" id="nrgZ" style="left:323px;top:180px">3</div>
-  <img src="img/icon_block.svg" style="left:335.2px;top:246.8px">
-  <img src="img/icon_str.svg"   style="left:383.2px;top:248.3px">
-  <img src="img/icon_dex.svg"   style="left:431px;top:247px">
-  <div class="val" id="blkZ" style="left:330px;top:299px;width:61px;height:34px;font-size:26px">0</div>
-  <div class="val" id="strZ" style="left:383px;top:299px;width:48px;height:34px;font-size:26px">0</div>
-  <div class="val" id="dexZ" style="left:431px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+  <div class="stats" id="statsZ" style="left:328px;top:238px"></div>
   <div class="transfer" id="trZ" style="left:80px;top:342px"></div>
 
   <!-- АФИНА -->
@@ -343,12 +346,7 @@
   <img src="img/frame_a.svg" style="left:2273.7px;top:48.8px">
   <div class="name" style="left:2119.2px;top:59.8px">APHINA</div>
   <div class="nrgpill" id="nrgA" style="left:2154.2px;top:180px">3</div>
-  <img src="img/icon_block.svg" style="left:2200.2px;top:246.8px">
-  <img src="img/icon_str.svg"   style="left:2155.2px;top:248.3px">
-  <img src="img/icon_dex.svg"   style="left:2107px;top:247px">
-  <div class="val" id="blkA" style="left:2195px;top:299px;width:61px;height:34px;font-size:26px">0</div>
-  <div class="val" id="strA" style="left:2155px;top:299px;width:48px;height:34px;font-size:26px">0</div>
-  <div class="val" id="dexA" style="left:2107px;top:299px;width:48px;height:34px;font-size:26px">0</div>
+  <div class="stats" id="statsA" style="left:1860px;top:238px;justify-content:flex-end"></div>
   <div class="transfer" id="trA" style="left:2237px;top:342px;justify-content:flex-end"></div>
 
   <div id="turnNo">ХОД 1</div>
@@ -497,15 +495,19 @@ const shuffle = a => { a = a.slice();
 
 // названия параметров заменяются иконками — так описание занимает меньше места
 const IC = {
-  str: '<img class="ic" src="img/icon_str.svg" alt="сила">',
-  dex: '<img class="ic" src="img/icon_dex.svg" alt="ловкость">',
-  blk: '<img class="ic" src="img/icon_block.svg" alt="блок">',
+  str: '<img class="ic" src="img/icon_str.png" alt="сила">',
+  dex: '<img class="ic" src="img/icon_dex.png" alt="ловкость">',
+  blk: '<img class="ic" src="img/icon_block.png" alt="блок">',
+  // дебафф — та же иконка со стрелкой вниз
+  strDn: '<img class="ic" src="img/icon_str_down.png" alt="сила вниз">',
+  dexDn: '<img class="ic" src="img/icon_dex_down.png" alt="ловкость вниз">',
   nrg: '<span class="ic-nrg" title="энергия"></span>',
   hp:  '<span class="ic-hp" title="здоровье">♥</span>',
 };
 const num = (v, buffed) => buffed ? `<span class="buffed">${v}</span>` : String(v);
-const pm = v => (v > 0 ? '+' : '−') + Math.abs(v);   // знак вместо слов «прибавляет»/«отнимает»
-const big = html => `<span class="dnum">${html}</span>`;   // крупная цифра урона слева
+const big = html => `<span class="dnum">${html}</span>`;   // крупная жирная цифра слева
+// число со знаком, всегда крупное; иконка выбирается по знаку
+const pmBig = v => big((v > 0 ? '+' : '−') + Math.abs(v));
 
 // описание строится из эффектов: каждый параметр отдельной строкой,
 // знаком и иконкой вместо слов
@@ -517,21 +519,21 @@ function cardDesc(c, owner) {
         return `${big(num(v, owner.str > 0))} урон врагу`;
       }
       case 'hpFoe':  return `${big(-f.v)} ${IC.hp} врагу`;
-      case 'hpSelf': return f.v < 0 ? `${big(-f.v)} урон себе` : `${pm(f.v)} ${IC.hp}`;
+      case 'hpSelf': return f.v < 0 ? `${big(-f.v)} урон себе` : `${pmBig(f.v)} ${IC.hp}`;
       case 'blk': {
         const v = f.v + owner.dex;
-        return `+${num(v, owner.dex > 0)} ${IC.blk}`;
+        return `${big('+' + num(v, owner.dex > 0))} ${IC.blk}`;
       }
-      case 'str':    return `${pm(f.v)} ${IC.str}`;
-      case 'dex':    return `${pm(f.v)} ${IC.dex}`;
-      case 'strFoe': return `${pm(f.v)} ${IC.str} врагу`;
-      case 'dexFoe': return `${pm(f.v)} ${IC.dex} врагу`;
-      case 'mulStr': return `×${f.v} ${IC.str}`;
-      case 'mulDex': return `×${f.v} ${IC.dex}`;
-      case 'mulBlk': return `×${f.v} ${IC.blk}`;
-      case 'mulNrg': return `×${f.v} ${IC.nrg}`;
-      case 'nrg':    return `${pm(f.v)} ${IC.nrg}`;
-      case 'draw':   return `+${f.v} карт`;
+      case 'str':    return `${pmBig(f.v)} ${f.v > 0 ? IC.str : IC.strDn}`;
+      case 'dex':    return `${pmBig(f.v)} ${f.v > 0 ? IC.dex : IC.dexDn}`;
+      case 'strFoe': return `${pmBig(f.v)} ${f.v > 0 ? IC.str : IC.strDn} врагу`;
+      case 'dexFoe': return `${pmBig(f.v)} ${f.v > 0 ? IC.dex : IC.dexDn} врагу`;
+      case 'mulStr': return `${big('×' + f.v)} ${IC.str}`;
+      case 'mulDex': return `${big('×' + f.v)} ${IC.dex}`;
+      case 'mulBlk': return `${big('×' + f.v)} ${IC.blk}`;
+      case 'mulNrg': return `${big('×' + f.v)} ${IC.nrg}`;
+      case 'nrg':    return `${pmBig(f.v)} ${IC.nrg}`;
+      case 'draw':   return `${big('+' + f.v)} карт`;
       case 'trBlock': return `перенос ${IC.blk}${f.v > 1 ? ` ${f.v} х.` : ''}`;
       case 'trNrg':   return `перенос ${IC.nrg}${f.v > 1 ? ` ${f.v} х.` : ''}`;
       case 'copyHand': return 'копия карты из руки';
@@ -832,6 +834,21 @@ async function resolveCard(actorIdx, key) {
 /* ---------- отрисовка ---------- */
 const handEls = [];
 
+// баффы и дебаффы: чип рисуется только при значении не ноль;
+// у отрицательного — своя иконка со стрелкой вниз
+function renderStats(boxId, p) {
+  const chips = [];
+  const add = (val, buff, debuff) => {
+    if (!val) return;
+    chips.push(`<span class="stchip"><img src="img/${val > 0 ? buff : debuff}">` +
+               `<b>${Math.abs(val)}</b></span>`);
+  };
+  add(p.block, 'icon_block.png', 'icon_block_down.png');
+  add(p.str,   'icon_str.png',   'icon_str_down.png');
+  add(p.dex,   'icon_dex.png',   'icon_dex_down.png');
+  $(boxId).innerHTML = chips.join('');
+}
+
 function renderTransfer(boxId, p) {
   const parts = [];
   // «→ 🛡 N» — блок переносится ещё N ходов; так же для энергии
@@ -851,8 +868,8 @@ function render() {
   $('nrgZ').textContent = Math.min(999, Math.max(0, P.energy));   // энергия цифрой 0–999
   $('nrgA').textContent = Math.min(999, Math.max(0, A.energy));
 
-  $('blkZ').textContent = P.block; $('strZ').textContent = P.str; $('dexZ').textContent = P.dex;
-  $('blkA').textContent = A.block; $('strA').textContent = A.str; $('dexA').textContent = A.dex;
+  renderStats('statsZ', P);
+  renderStats('statsA', A);
 
   renderTransfer('trZ', P);
   renderTransfer('trA', A);
