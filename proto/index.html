@@ -77,14 +77,19 @@
   .ic-nrg { display:inline-block; width:1em; height:0.62em; background:#43BEF3;
     border-radius:2px; vertical-align:0.02em; }
   .ic-hp { color:#c0392b; font-weight:700; }
-  /* баффы и дебаффы: показываются только когда значение не ноль */
-  .stats { position:absolute; width:400px; height:74px; display:flex; gap:22px;
-    align-items:center; }
-  .stats .stchip { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  /* баффы и дебаффы: колонка как в макете «HUD example» — иконка 150×150, число справа.
+     Показываются только непустые значения, бафф и дебафф — отдельными строками */
+  /* z-index — чтобы колонка не пряталась под панелью лога; pointer-events:none оставляет
+     лог прокручиваемым сквозь неё */
+  .stats { position:absolute; width:620px; display:flex; flex-direction:column; gap:8px;
+    align-items:flex-start; pointer-events:none; z-index:60; }
+  .stats.right { align-items:flex-end; }
+  .stats .stchip { display:flex; align-items:center; gap:52px; flex:0 0 auto; height:150px; }
+  .stats.right .stchip { flex-direction:row-reverse; }
   /* #stage img задан absolute и бьёт классы по специфичности — возвращаем в поток через #stage */
-  #stage .stats .stchip img { position:static; width:62px; height:62px; flex:0 0 auto; }
-  .stats .stchip b { font-size:34px; font-weight:800; color:#fff;
-    text-shadow:0 2px 5px rgba(0,0,0,.9); line-height:1; }
+  #stage .stats .stchip img { position:static; width:150px; height:150px; flex:0 0 auto; }
+  .stats .stchip b { font-size:91px; font-weight:900; color:#fff;
+    text-shadow:0 4px 8px rgba(0,0,0,.9); line-height:1; }
 
   /* индикатор переноса блока/энергии: иконка параметра + число ходов */
   .transfer { position:absolute; width:280px; height:40px; display:flex; gap:16px;
@@ -101,6 +106,12 @@
   #pendLabel.show { display:block; }
   .card.pend { cursor:pointer; filter:drop-shadow(0 0 18px rgba(126,224,255,.75)); }
   .card.pend:hover { transform:translateY(-22px); }
+
+  /* окно руки на 5 карт: лишние карты листаются свайпом, клип не даёт им наехать на колоду */
+  #handBox { position:absolute; left:460px; top:1010px; width:1647px; height:558px;
+    overflow:hidden; }
+  #handBox.panning .card.inhand { transition:none; }
+  #handBox.panning .card.inhand:hover { transform:none; }
 
   .card.inhand { cursor:grab; transition:transform .18s ease, top .25s ease, left .25s ease; }
   .card.inhand:hover { transform:translateY(-38px); }
@@ -145,11 +156,12 @@
     text-align:center; font-size:46px; font-weight:700; letter-spacing:3px;
     color:#D9A847; text-shadow:0 3px 6px rgba(0,0,0,.9); }
 
-  #oppBack { position:absolute; left:2392px; top:360px; width:96px; height:134px;
+  /* счётчик карт соперника ушёл вниз: на прежнем месте теперь колонка баффов Афины */
+  #oppBack { position:absolute; left:2392px; top:1112px; width:96px; height:134px;
     border-radius:14px; background:rgba(18,28,46,.88); border:3px solid #B88F42;
     display:flex; align-items:center; justify-content:center;
     font-size:46px; font-weight:700; color:#fff; text-shadow:0 2px 5px #000; }
-  #oppLabel { position:absolute; left:2319px; top:309px; width:186px; height:54px;
+  #oppLabel { position:absolute; left:2319px; top:1058px; width:186px; height:54px;
     text-align:right; font-size:19px; font-weight:600; color:#c2c9d4;
     text-shadow:0 2px 4px #000; line-height:54px; }
 
@@ -336,8 +348,8 @@
   <img src="img/frame_z.svg" style="left:81.2px;top:48.8px">
   <div class="name" style="left:301.2px;top:57.8px">ZEUS</div>
   <div class="nrgpill" id="nrgZ" style="left:323px;top:180px">3</div>
-  <div class="stats" id="statsZ" style="left:328px;top:238px"></div>
-  <div class="transfer" id="trZ" style="left:80px;top:342px"></div>
+  <div class="stats" id="statsZ" style="left:121px;top:258px"></div>
+  <div class="transfer" id="trZ" style="left:430px;top:186px"></div>
 
   <!-- АФИНА -->
   <div class="hpwrap" style="left:1723.2px;top:120.8px">
@@ -354,8 +366,8 @@
   <img src="img/frame_a.svg" style="left:2273.7px;top:48.8px">
   <div class="name" style="left:2119.2px;top:59.8px">APHINA</div>
   <div class="nrgpill" id="nrgA" style="left:2154.2px;top:180px">3</div>
-  <div class="stats" id="statsA" style="left:1860px;top:238px;justify-content:flex-end"></div>
-  <div class="transfer" id="trA" style="left:2237px;top:342px;justify-content:flex-end"></div>
+  <div class="stats right" id="statsA" style="left:1856.4px;top:258px"></div>
+  <div class="transfer" id="trA" style="left:1844px;top:186px;justify-content:flex-end"></div>
 
   <div id="turnNo">ХОД 1</div>
   <div id="roomCode">ПРОТОТИП ДУЭЛИ</div>
@@ -408,6 +420,8 @@
 
   <div id="dropzone"><div class="hint">СЫГРАТЬ КАРТУ</div></div>
   <div id="played"></div>
+
+  <div id="handBox"></div>
 
   <button id="btnEnd">КОНЕЦ ХОДА</button>
 
@@ -866,19 +880,26 @@ async function resolveCard(actorIdx, key) {
 /* ---------- отрисовка ---------- */
 const handEls = [];
 
-// баффы и дебаффы: чип рисуется только при значении не ноль;
-// у отрицательного — своя иконка со стрелкой вниз
+// баффы и дебаффы: считаем суммарно (p.block/str/dex — итог), а показываем раздельно.
+// Дебафф — сумма ещё не снятых отрицательных эффектов, бафф — то, что останется после их спада.
+// Чип рисуется только при значении не ноль; у дебаффа своя иконка со стрелкой вниз.
+const STAT_ROWS = [
+  ['block', 'icon_block.png', 'icon_block_down.png'],
+  ['str',   'icon_str.png',   'icon_str_down.png'],
+  ['dex',   'icon_dex.png',   'icon_dex_down.png'],
+];
 function renderStats(boxId, p) {
-  const chips = [];
-  const add = (val, buff, debuff) => {
-    if (!val) return;
-    chips.push(`<span class="stchip"><img src="img/${val > 0 ? buff : debuff}">` +
-               `<b>${Math.abs(val)}</b></span>`);
-  };
-  add(p.block, 'icon_block.png', 'icon_block_down.png');
-  add(p.str,   'icon_str.png',   'icon_str_down.png');
-  add(p.dex,   'icon_dex.png',   'icon_dex_down.png');
-  $(boxId).innerHTML = chips.join('');
+  const down = { block:0, str:0, dex:0 };
+  for (const d of p.debuffs) down[d.stat] += d.amount;
+  const chip = (icon, text) => `<span class="stchip"><img src="img/${icon}"><b>${text}</b></span>`;
+  const buffs = [], debuffs = [];
+  for (const [stat, up, dn] of STAT_ROWS) {
+    const minus = down[stat];              // сколько сейчас снято дебаффами
+    const plus = p[stat] + minus;          // «чистый» бафф без учёта дебаффов
+    if (plus) buffs.push(chip(up, String(plus)));
+    if (minus) debuffs.push(chip(dn, '-' + minus));
+  }
+  $(boxId).innerHTML = buffs.concat(debuffs).join('');
 }
 
 function renderTransfer(boxId, p) {
@@ -923,24 +944,41 @@ function render() {
   }
 }
 
-const HAND_X = 460, HAND_Y = 1070, HAND_STEP = 328;
+const HAND_Y = 1070, HAND_STEP = 328;
+const HAND_VIEW = 5;                       // карт видно одновременно
+const HB_X = 460, HB_Y = 1010;             // левый верхний угол окна руки (#handBox)
+const handBox = $('handBox');
+let handScroll = 0;                        // сдвиг руки в пикселях сцены
+
+// прокрутка нужна только когда карт больше, чем влезает в окно
+function handMaxScroll() { return Math.max(0, (S.p[0].hand.length - HAND_VIEW) * HAND_STEP); }
+const clampScroll = v => Math.max(0, Math.min(handMaxScroll(), v));
+
+// координаты карт внутри окна руки; вызывается и при прокрутке
+function layoutHand() {
+  handEls.forEach((el, i) => {
+    if (el.classList.contains('dragging')) return;   // тянущуюся карту не двигаем
+    el.style.left = (i * HAND_STEP - handScroll) + 'px';
+    el.style.top = (HAND_Y - HB_Y) + 'px';
+    el.dataset.home = el.style.left + '|' + el.style.top;
+  });
+}
 
 function renderHand() {
   const P = S.p[0];
   handEls.forEach(e => e.remove());
   handEls.length = 0;
+  handScroll = clampScroll(handScroll);
   const shown = P.hand.slice().sort((a, b) => byTypeCost(a.key, b.key));
-  shown.forEach((card, i) => {
+  shown.forEach(card => {
     const el = buildCardEl(card.key, P, true);
     const playable = S.cur === 0 && !S.busy && S.winner === null && DB[card.key].cost <= P.energy;
     if (!playable) el.classList.add('locked');
-    el.style.left = (HAND_X + i * HAND_STEP) + 'px';
-    el.style.top = HAND_Y + 'px';
-    el.dataset.home = el.style.left + '|' + el.style.top;
-    if (playable) attachDrag(el, card);
-    stage.appendChild(el);
+    attachHandGesture(el, card, playable);
+    handBox.appendChild(el);
     handEls.push(el);
   });
+  layoutHand();
 }
 
 const PEND_Y = 552;
@@ -977,39 +1015,64 @@ function renderPending() {
 const dz = $('dropzone');
 const DZ = { x:860, y:300, w:880, h:700 };
 
-function attachDrag(el, card) {
+const GEST_MIN = 26;   // после такого сдвига уже ясно: листаем руку или тянем карту
+
+// один жест на карте: движение вбок листает руку, движение вверх тянет карту в центр
+function attachHandGesture(el, card, playable) {
   el.addEventListener('pointerdown', e => {
-    if (S.cur !== 0 || S.busy || S.winner !== null) return;
+    if (S.busy || S.winner !== null) return;
     e.preventDefault();
     const start = toStage(e.clientX, e.clientY);
-    const ox = start.x - parseFloat(el.style.left);
-    const oy = start.y - parseFloat(el.style.top);
-    el.setPointerCapture(e.pointerId);
-    el.classList.add('dragging');
-    dz.classList.add('show');
+    const scroll0 = handScroll;
+    let mode = null, ox = 0, oy = 0;
+
+    // карту вынимаем из окна руки на сцену, иначе клип обрежет её при перетаскивании
+    const startDrag = () => {
+      const x = HB_X + parseFloat(el.style.left), y = HB_Y + parseFloat(el.style.top);
+      el.classList.add('dragging');
+      stage.appendChild(el);
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      ox = start.x - x; oy = start.y - y;
+      dz.classList.add('show');
+    };
 
     const move = ev => {
       const p = toStage(ev.clientX, ev.clientY);
-      el.style.left = (p.x - ox) + 'px';
-      el.style.top = (p.y - oy) + 'px';
-      dz.classList.toggle('hot', inZone(el));
+      const dx = p.x - start.x, dy = p.y - start.y;
+      if (!mode) {
+        if (Math.abs(dx) < GEST_MIN && Math.abs(dy) < GEST_MIN) return;
+        // непроигрываемую карту тянуть некуда — её жест всегда прокрутка
+        if (!playable || Math.abs(dx) > Math.abs(dy)) { mode = 'pan'; handBox.classList.add('panning'); }
+        else { mode = 'drag'; startDrag(); }
+      }
+      if (mode === 'pan') { handScroll = clampScroll(scroll0 - dx); layoutHand(); }
+      else {
+        el.style.left = (p.x - ox) + 'px';
+        el.style.top = (p.y - oy) + 'px';
+        dz.classList.toggle('hot', inZone(el));
+      }
     };
     // pointercancel обязателен: на телефоне система может прервать жест,
-    // и без него карта зависла бы под пальцем
+    // и без него карта зависла бы под пальцем.
+    // Слушаем на window, а не на карте: при перетаскивании она меняет родителя,
+    // и захват указателя на самой карте потерялся бы.
     const finish = play => {
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      handBox.classList.remove('panning');
+      if (mode !== 'drag') return;
       el.classList.remove('dragging');
       dz.classList.remove('show', 'hot');
       if (play && inZone(el)) playCard(card);
-      else { const [hx, hy] = el.dataset.home.split('|'); el.style.left = hx; el.style.top = hy; }
+      else { handBox.appendChild(el); layoutHand(); }
     };
     const onUp = () => finish(true);
     const onCancel = () => finish(false);
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onCancel);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
   });
 }
 function inZone(el) {

@@ -69,6 +69,11 @@ vm.runInContext(script + `
 ;globalThis.__MAX = MAX_COPIES;
 ;globalThis.__STARTER = STARTER_DECK;
 ;globalThis.__byTypeCost = byTypeCost;
+;globalThis.__renderStats = renderStats;
+;globalThis.__renderHand = renderHand;
+;globalThis.__handMax = handMaxScroll;
+;globalThis.__clamp = clampScroll;
+;globalThis.__handEls = handEls;
 `, ctx);
 
 (async () => {
@@ -257,6 +262,38 @@ vm.runInContext(script + `
   ctx.__finish(0);
   check('незабранные новые карты ушли в сброс',
         Pl.pending.length === 0 && Pl.disc.length >= discWas + 2, `сброс ${Pl.disc.length}`);
+
+  // баффы и дебаффы рисуются отдельными строками: сначала все баффы, потом все дебаффы
+  const R = ctx.__get().p[0];
+  R.block = 10; R.str = 0; R.dex = 0;
+  R.debuffs = [{ stat:'str', amount:10, wait:1 }];   // силы было +10, враг снял 10 → в сумме 0
+  ctx.__renderStats('statsZ', R);
+  const hud = ctx.document.getElementById('statsZ').innerHTML;
+  check('чипов ровно три', (hud.match(/stchip/g) || []).length === 3, hud);
+  check('бафф брони показан', hud.includes('icon_block.png') && hud.includes('<b>10</b>'), hud);
+  check('бафф силы показан отдельно от дебаффа', hud.includes('icon_str.png'), hud);
+  check('дебафф силы показан своей иконкой', hud.includes('icon_str_down.png') && hud.includes('<b>-10</b>'), hud);
+  check('баффы идут раньше дебаффов', hud.indexOf('icon_str.png') < hud.indexOf('icon_str_down.png'), hud);
+  check('нулевая ловкость не показана', !hud.includes('icon_dex'), hud);
+
+  R.debuffs = []; R.str = 0; R.block = 0;
+  ctx.__renderStats('statsZ', R);
+  check('без баффов и дебаффов чипов нет', ctx.document.getElementById('statsZ').innerHTML === '');
+
+  // прокрутка руки: окно на 5 карт, лишние листаются
+  const HS = ctx.__get().p[0];
+  HS.hand = Array.from({ length: 8 }, (_, i) => ({ uid: 9000 + i, key: 'a1' }));
+  check('8 карт: прокрутка на 3 шага', ctx.__handMax() === 3 * 328, String(ctx.__handMax()));
+  check('прокрутка не уходит за края', ctx.__clamp(-500) === 0 && ctx.__clamp(99999) === 3 * 328);
+  ctx.__renderHand();
+  check('все карты руки лежат в окне руки',
+        ctx.document.getElementById('handBox').children.length === 8,
+        String(ctx.document.getElementById('handBox').children.length));
+  check('карты разложены с шагом 328',
+        ctx.__handEls[0].style.left === '0px' && ctx.__handEls[1].style.left === '328px',
+        ctx.__handEls.map(e => e.style.left).join(','));
+  HS.hand = HS.hand.slice(0, 5);
+  check('5 карт: прокрутки нет', ctx.__handMax() === 0, String(ctx.__handMax()));
 
   // полная партия — детерминированная агрессивная колода у обоих,
   // чтобы бой гарантированно завершался (случайные колоды с копиями и
