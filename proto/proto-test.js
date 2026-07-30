@@ -2,7 +2,8 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const BASE = 'C:/Users/Konstantin/Documents/claude projects/atlanteans-pvp/proto/';
+const path = require('path');
+const BASE = __dirname + path.sep;   // тест лежит рядом с прототипом, путь к машине не привязан
 const html = fs.readFileSync(BASE + 'index.html', 'utf8');
 const cardsJs = fs.readFileSync(BASE + 'cards.js', 'utf8').replace(/if \(typeof module[\s\S]*$/, '');
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1];

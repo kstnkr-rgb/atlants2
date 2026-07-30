@@ -261,6 +261,17 @@
   .pick-side[data-side="foe"].on { background:#c0563e; color:#fff; border-color:#c0563e; }
   #startScreen .ss-actions { flex:0 0 auto; display:flex; gap:20px; justify-content:center;
     margin-top:34px; }
+  /* бой вдвоём по коду комнаты */
+  #startScreen .pvp { flex:0 0 auto; display:flex; gap:18px; align-items:center;
+    justify-content:center; margin-top:22px; }
+  #startScreen .pvp.off { display:none; }
+  .pvp-or { font-size:24px; color:#98a5b2; }
+  #pvpCode { width:180px; font-size:34px; font-weight:700; letter-spacing:6px; text-align:center;
+    padding:12px 14px; border-radius:12px; border:3px solid #3a4654;
+    background:rgba(255,255,255,.08); color:#fff; }
+  .pvp-status { flex:0 0 auto; text-align:center; font-size:26px; color:#D9A847;
+    min-height:34px; margin-top:14px; }
+  .pvp-status.bad { color:#e07a63; }
 
   .ed-slots { flex:0 0 auto; display:grid; grid-template-columns:repeat(10, 235px);
     gap:14px; justify-content:center; margin-bottom:20px; }
@@ -389,9 +400,17 @@
   <div class="ss-sub">выберите колоду</div>
   <div class="ss-list" id="ssList"></div>
   <div class="ss-actions">
-    <button class="btn" id="ssPlay">ИГРАТЬ</button>
+    <button class="btn" id="ssPlay">ИГРАТЬ С БОТОМ</button>
     <button class="btn ghost" id="ssEdit">НОВАЯ КОЛОДА</button>
   </div>
+  <!-- бой вдвоём: один создаёт комнату и диктует код, второй входит по коду -->
+  <div class="pvp" id="pvpBox">
+    <button class="btn" id="pvpCreate">СОЗДАТЬ БОЙ</button>
+    <span class="pvp-or">или войти по коду</span>
+    <input id="pvpCode" maxlength="4" inputmode="numeric" placeholder="0000">
+    <button class="btn ghost" id="pvpJoin">ВОЙТИ</button>
+  </div>
+  <div class="pvp-status" id="pvpStatus"></div>
 </div>
 
 <div class="screen" id="deckEditor">
@@ -594,6 +613,19 @@ function buildCardEl(key, owner, forHand) {
 const HAND_SIZE = 5, MAX_HP = 50, MAX_NRG = 3;
 let S;
 
+/* ---------- сетевой бой: точки подключения ----------
+   Без net.js это заглушка и игра идёт как раньше — против бота.
+   net.js подменяет поля и делает из вкладки хоста (он считает бой)
+   или гостя (он только рисует присланный снимок). */
+const NET = {
+  mode: 'local',   // 'local' | 'host' | 'guest'
+  center: null,    // карта, показанная в центре — гость видит её в снимке
+  push() {},       // хост: отправить снимок состояния
+  send() {},       // гость: отправить действие
+};
+// в PvP второй боец — тоже человек, значит новые карты ему кладём над рукой, а не в руку
+const isHuman = i => i === 0 || NET.mode === 'host';
+
 function mkPlayer(name, deckKeys) {
   return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
            trBlock:0, trNrg:0,            // счётчики переноса блока и энергии
@@ -768,7 +800,7 @@ function bump(who, stat, delta, side, label, byFoe) {
 async function resolveCard(actorIdx, key) {
   const me = S.p[actorIdx], opp = S.p[1 - actorIdx], c = DB[key];
   const foe = 1 - actorIdx;
-  const toPend = actorIdx === 0;   // игроку новые карты кладём над рукой, боту — сразу в руку
+  const toPend = isHuman(actorIdx);   // человеку новые карты кладём над рукой, боту — сразу в руку
 
   for (const f of c.fx) {
     let note = '';
@@ -942,6 +974,8 @@ function render() {
     $('overText').textContent = S.winner === 0 ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
     $('over').classList.add('show');
   }
+
+  NET.push();   // хост после любого изменения отдаёт снимок гостю (внутри — троттлинг)
 }
 
 const HAND_Y = 1070, HAND_STEP = 328;
@@ -1001,6 +1035,7 @@ function renderPending() {
     el.style.top = PEND_Y + 'px';
     el.addEventListener('click', () => {
       if (S.busy) return;
+      if (NET.mode === 'guest') { NET.send({ t:'take', uid:card.uid }); return; }
       P.pending = P.pending.filter(x => x.uid !== card.uid);
       P.hand.push(card);
       logMsg(`  взята новая карта «${DB[card.key].title}» → рука ${P.hand.length}`, 'you');
@@ -1080,21 +1115,32 @@ function inZone(el) {
   return cx > DZ.x && cx < DZ.x + DZ.w && cy > DZ.y && cy < DZ.y + DZ.h;
 }
 
-/* ---------- ход игрока ---------- */
-async function playCard(card) {
-  const P = S.p[0], c = DB[card.key];
-  if (c.cost > P.energy || S.busy) { render(); return; }
-  S.busy = true;
+/* ---------- розыгрыш карты ---------- */
+// общая для всех: своя рука, бот и соперник-человек в PvP.
+// S.busy выставляет вызывающий — у бота он держится на весь его ход.
+async function playBy(who, card) {
+  const P = S.p[who], c = DB[card.key];
+  if (c.cost > P.energy) { render(); return false; }
   P.energy -= c.cost;
   P.hand = P.hand.filter(x => x.uid !== card.uid);
   (c.exhaust ? P.exh : P.disc).push(card);
-  logMsg(`Вы: «${c.title}» (${c.cost} эн.)`, 'you');
+  logMsg(`${who === 0 ? 'Вы' : 'Соперник'}: «${c.title}» (${c.cost} эн.)`, who === 0 ? 'you' : 'foe');
   render();
 
+  NET.center = { key: card.key, side: who };   // гость увидит эту карту в центре
   await showPlayed(card.key, P);
-  await resolveCard(0, card.key);
+  await resolveCard(who, card.key);
   await hidePlayed();
+  NET.center = null;
+  return true;
+}
 
+/* ---------- ход игрока ---------- */
+async function playCard(card) {
+  if (S.busy || S.winner !== null) { render(); return; }
+  if (NET.mode === 'guest') { NET.send({ t:'play', uid:card.uid }); return; }
+  S.busy = true;
+  await playBy(0, card);
   S.busy = false;
   render();
 }
@@ -1124,16 +1170,8 @@ async function botTurn() {
     const pick = chooseCard(options, B, P);
     if (!pick) break;
 
-    const c = DB[pick.key];
-    B.energy -= c.cost;
-    B.hand = B.hand.filter(x => x.uid !== pick.uid);
-    (c.exhaust ? B.exh : B.disc).push(pick);
-    logMsg(`Соперник: «${c.title}» (${c.cost} эн.)`, 'foe');
-    render();
-
-    await showPlayed(pick.key, B);   // карта соперника сначала показывается в центре
-    await resolveCard(1, pick.key);  // и только потом срабатывает её эффект
-    await hidePlayed();
+    // карта соперника сначала показывается в центре и только потом срабатывает
+    await playBy(1, pick);
     await sleep(220);
   }
 
@@ -1192,14 +1230,23 @@ function finishTurn(who) {
   logMsg(`— ход ${S.turn}: ${S.p[S.cur].name} —`, 'turn');
   startTurn(S.cur);
   render();
-  if (S.cur === 1 && S.winner === null) {
+  // в PvP за второго ходит живой игрок — его действия придут по сети
+  if (S.cur === 1 && S.winner === null && NET.mode === 'local') {
     S.busy = true;
     botTurn().then(() => { S.busy = false; render(); });
   }
 }
 
-$('btnEnd').onclick = () => { if (S.cur === 0 && !S.busy && S.winner === null) finishTurn(0); };
-$('btnAgain').onclick = () => { $('over').classList.remove('show'); newGame(lastDeck, lastFoe); };
+$('btnEnd').onclick = () => {
+  if (S.cur !== 0 || S.busy || S.winner !== null) return;
+  if (NET.mode === 'guest') { NET.send({ t:'end' }); return; }
+  finishTurn(0);
+};
+$('btnAgain').onclick = () => {
+  if (NET.mode === 'guest') { NET.send({ t:'again' }); return; }
+  $('over').classList.remove('show');
+  newGame(lastDeck, lastFoe);
+};
 
 /* ---------- хранение колод ---------- */
 const DECKS_KEY = 'atlanteans_decks';
@@ -1389,5 +1436,7 @@ $('edSave').onclick = () => {
 renderStart();
 showScreen(startScreen);
 </script>
+<!-- сетевой слой грузится последним: ему нужны движок и экраны, объявленные выше -->
+<script src="net.js"></script>
 </body>
 </html>
