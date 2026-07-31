@@ -193,6 +193,9 @@
     text-shadow:0 8px 20px rgba(0,0,0,.9); }
   #over button { padding:26px 76px; font-size:38px; font-weight:700; border:none;
     border-radius:22px; background:#D9A847; color:#231803; cursor:pointer; }
+  /* «в меню» — второстепенное действие, поэтому без золотой заливки */
+  #over #btnMenu { background:rgba(255,255,255,.12); color:#e8eef4;
+    box-shadow:inset 0 0 0 3px #D9A847; margin-top:-20px; }
 
   /* портретная ориентация: игра горизонтальная, просим повернуть устройство */
   #rotate { position:fixed; inset:0; background:#0a0d10; color:#D9A847; z-index:2000;
@@ -243,10 +246,7 @@
   .scr-head .btn { padding:12px 26px; font-size:26px; }
   .spacer { margin-left:auto; }
 
-  #startScreen .ss-title { font-size:96px; font-weight:700; color:#D9A847; letter-spacing:10px;
-    text-align:center; margin:40px 0 10px; }
-  #startScreen .ss-sub { text-align:center; color:#98a5b2; font-size:26px; margin-bottom:40px; }
-  #startScreen .ss-list { flex:1 1 auto; overflow-y:auto; touch-action:pan-y;
+  .ss-list { flex:1 1 auto; overflow-y:auto; touch-action:pan-y;
     overscroll-behavior:contain; display:flex; flex-direction:column; gap:14px;
     max-width:1200px; width:100%; margin:0 auto; }
   .ss-item { display:flex; align-items:center; gap:20px; padding:20px 26px; border-radius:14px;
@@ -259,19 +259,77 @@
     border-radius:12px; padding:10px 22px; font-size:24px; font-weight:700; cursor:pointer; }
   .pick-side[data-side="me"].on  { background:#D9A847; color:#231803; border-color:#D9A847; }
   .pick-side[data-side="foe"].on { background:#c0563e; color:#fff; border-color:#c0563e; }
-  #startScreen .ss-actions { flex:0 0 auto; display:flex; gap:20px; justify-content:center;
+  .ss-actions { flex:0 0 auto; display:flex; gap:20px; justify-content:center;
     margin-top:34px; }
-  /* бой вдвоём по коду комнаты */
-  #startScreen .pvp { flex:0 0 auto; display:flex; gap:18px; align-items:center;
-    justify-content:center; margin-top:22px; }
-  #startScreen .pvp.off { display:none; }
-  .pvp-or { font-size:24px; color:#98a5b2; }
-  #pvpCode { width:180px; font-size:34px; font-weight:700; letter-spacing:6px; text-align:center;
-    padding:12px 14px; border-radius:12px; border:3px solid #3a4654;
-    background:rgba(255,255,255,.08); color:#fff; }
-  .pvp-status { flex:0 0 auto; text-align:center; font-size:26px; color:#D9A847;
-    min-height:34px; margin-top:14px; }
-  .pvp-status.bad { color:#e07a63; }
+
+  /* ---------- экраны схемы: общая шапка и фон ----------
+     Оформление снято с макета: бордовая полоса, золотая линия, стрелка «назад». */
+  .screen { background:#0a0d10 url("img/menu_bg.png") center/cover no-repeat; }
+  .screen::before { content:""; position:absolute; inset:0; background:rgba(10,6,7,.72); }
+  .screen > * { position:relative; }
+  .scr-top { flex:0 0 auto; height:92px; margin:-44px -60px 26px; background:rgba(36,14,17,.96);
+    border-bottom:4px solid #D9A847; display:flex; align-items:center; padding:0 34px; }
+  .back { border:none; background:none; color:#FFE8AC; font-size:46px; line-height:1;
+    cursor:pointer; padding:6px 16px; }
+  .back:active { color:#D9A847; }
+  .ss-sub { flex:0 0 auto; color:#D9A847; font-size:30px; font-weight:700; letter-spacing:3px;
+    max-width:1200px; width:100%; margin:0 auto 16px; }
+  .ss-list .empty { padding:60px; text-align:center; font-size:30px; color:#8b7f6d; }
+
+  /* главный экран */
+  .screen.menu { padding:0; }
+  .menu-hero { position:absolute; left:-4%; bottom:-6%; height:112%; width:auto;
+    pointer-events:none; }
+  .menu-side { position:absolute; right:6%; top:50%; transform:translateY(-50%);
+    width:min(46%, 620px); display:flex; flex-direction:column; align-items:stretch; gap:14px; }
+  /* #stage img задан absolute и бьёт классы по специфичности — возвращаем в поток */
+  #stage .menu-logo { position:relative; width:60%; align-self:center; height:auto; }
+  .menu-sub { text-align:center; color:#D9A847; font-size:30px; font-weight:800;
+    letter-spacing:10px; margin:-6px 0 18px; }
+  .menu-btn { font-size:30px; letter-spacing:4px; padding:20px 0; }
+  .avatar-btn { position:absolute; right:34px; top:28px; width:86px; height:86px; padding:0;
+    border-radius:50%; border:3px solid #D9A847; background:#1a1113; cursor:pointer;
+    overflow:hidden; }
+  .avatar-btn img { width:100%; height:100%; object-fit:cover; display:block; }
+
+  /* сканирование карты */
+  .screen.scan { background-image:url("img/scan_bg.png"); }
+  .screen.scan::before { background:rgba(10,6,7,.58); }
+  .scan-hint { flex:0 0 auto; text-align:center; color:#FFE8AC; font-size:30px; font-weight:700;
+    letter-spacing:3px; }
+  .viewfinder { flex:0 0 auto; position:relative; width:300px; height:430px; margin:30px auto;
+    background:rgba(255,255,255,.10); border-radius:14px; }
+  .viewfinder i { position:absolute; width:52px; height:52px; }
+  .viewfinder i:nth-child(1) { left:-4px; top:-4px; border-left:6px solid #D9A847; border-top:6px solid #D9A847; }
+  .viewfinder i:nth-child(2) { right:-4px; top:-4px; border-right:6px solid #D9A847; border-top:6px solid #D9A847; }
+  .viewfinder i:nth-child(3) { left:-4px; bottom:-4px; border-left:6px solid #D9A847; border-bottom:6px solid #D9A847; }
+  .viewfinder i:nth-child(4) { right:-4px; bottom:-4px; border-right:6px solid #D9A847; border-bottom:6px solid #D9A847; }
+
+  /* окно «карта добавлена» */
+  .added { position:absolute; inset:0; background:rgba(6,4,4,.8); z-index:20;
+    display:none; align-items:center; justify-content:center; }
+  .added.show { display:flex; }
+  .added-win { width:520px; padding:30px; border-radius:20px; background:#2a1013;
+    border:4px solid #D9A847; text-align:center; }
+  .added-title { color:#D9A847; font-size:34px; font-weight:800; letter-spacing:4px; }
+  .added-card { height:340px; display:flex; align-items:center; justify-content:center;
+    margin:18px 0 8px; }
+  .added-card .card { position:relative; transform:scale(.7); transform-origin:center; }
+  .added-name { color:#FFE8AC; font-size:26px; margin-bottom:22px; }
+
+  /* профиль */
+  .pf { flex:1 1 auto; display:flex; flex-direction:column; align-items:center; gap:14px;
+    overflow-y:auto; touch-action:pan-y; }
+  #stage .pf-av { position:relative; width:230px; height:230px; border-radius:50%;
+    object-fit:cover; border:5px solid #D9A847; flex:0 0 auto; }
+  .pf-hint { color:#8b7f6d; font-size:22px; }
+  #pfName { width:min(560px, 90%); font-size:30px; padding:14px 18px; border-radius:12px;
+    border:3px solid #D9A847; background:rgba(255,255,255,.08); color:#fff; text-align:center; }
+  .pf-rows { width:min(560px, 90%); display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+  .pf-row { display:flex; justify-content:space-between; padding:14px 22px; border-radius:10px;
+    background:rgba(255,255,255,.07); border:2px solid rgba(217,168,71,.35);
+    font-size:26px; color:#e8eef4; }
+  .pf-row b { color:#D9A847; }
 
   .ed-slots { flex:0 0 auto; display:grid; grid-template-columns:repeat(10, 235px);
     gap:14px; justify-content:center; margin-bottom:20px; }
@@ -279,10 +337,10 @@
   .ed-avail { flex:1 1 auto; overflow-y:auto; touch-action:pan-y; overscroll-behavior:contain;
     display:grid; grid-template-columns:repeat(10, 235px); gap:14px;
     justify-content:center; align-content:start; padding-right:12px; }
-  .ed-avail::-webkit-scrollbar, #startScreen .ss-list::-webkit-scrollbar { width:12px; }
-  .ed-avail::-webkit-scrollbar-track, #startScreen .ss-list::-webkit-scrollbar-track {
+  .ed-avail::-webkit-scrollbar, .ss-list::-webkit-scrollbar { width:12px; }
+  .ed-avail::-webkit-scrollbar-track, .ss-list::-webkit-scrollbar-track {
     background:rgba(255,255,255,.06); border-radius:6px; }
-  .ed-avail::-webkit-scrollbar-thumb, #startScreen .ss-list::-webkit-scrollbar-thumb {
+  .ed-avail::-webkit-scrollbar-thumb, .ss-list::-webkit-scrollbar-thumb {
     background:rgba(255,255,255,.3); border-radius:6px; }
 
   /* карта в редакторе — тот же вид, что в руке, только уменьшенный */
@@ -395,22 +453,72 @@
   <div id="logBox"></div>
 
 
-<div class="screen" id="startScreen">
-  <div class="ss-title">АТЛАНТЫ</div>
-  <div class="ss-sub">выберите колоду</div>
+<!-- ЭКРАНЫ ПО СХЕМЕ ИЗ FIGMA (лист «схема», фрейм «схема экранов — графика») -->
+
+<!-- главный экран -->
+<div class="screen menu" id="menuScreen">
+  <img class="menu-hero" src="img/zeus.png" alt="">
+  <div class="menu-side">
+    <img class="menu-logo" src="img/logo.png" alt="">
+    <div class="menu-sub">ДУЭЛИ БОГОВ</div>
+    <button class="btn menu-btn" id="mmDecks">КОЛОДА</button>
+    <button class="btn menu-btn ghost" id="mmPvp">PvP</button>
+    <button class="btn menu-btn ghost" id="mmPve">PvE</button>
+  </div>
+  <button class="avatar-btn" id="mmProfile" title="Профиль"><img src="img/avatar.png" alt=""></button>
+</div>
+
+<!-- PvE: выбор колоды перед боем с ботом -->
+<div class="screen" id="pveScreen">
+  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <div class="ss-sub">КОЛОДЫ:</div>
   <div class="ss-list" id="ssList"></div>
+  <div class="ss-actions"><button class="btn" id="ssPlay">ИГРАТЬ</button></div>
+</div>
+
+<!-- PvP: лобби. Мультиплеер сейчас выключен, поэтому список пуст -->
+<div class="screen" id="pvpScreen">
+  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <div class="ss-sub">ИГРОКИ ОНЛАЙН:</div>
+  <div class="ss-list"><div class="empty">Пусто</div></div>
+</div>
+
+<!-- экран колод: список, редактирование, сканирование -->
+<div class="screen" id="decksScreen">
+  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <div class="ss-sub">КОЛОДЫ:</div>
+  <div class="ss-list" id="dkList"></div>
   <div class="ss-actions">
-    <button class="btn" id="ssPlay">ИГРАТЬ С БОТОМ</button>
-    <button class="btn ghost" id="ssEdit">НОВАЯ КОЛОДА</button>
+    <button class="btn" id="dkNew">СОЗДАТЬ КОЛОДУ</button>
+    <button class="btn ghost" id="dkScan">ОТСКАНИРОВАТЬ КАРТУ</button>
   </div>
-  <!-- бой вдвоём: один создаёт комнату и диктует код, второй входит по коду -->
-  <div class="pvp" id="pvpBox">
-    <button class="btn" id="pvpCreate">СОЗДАТЬ БОЙ</button>
-    <span class="pvp-or">или войти по коду</span>
-    <input id="pvpCode" maxlength="4" inputmode="numeric" placeholder="0000">
-    <button class="btn ghost" id="pvpJoin">ВОЙТИ</button>
+</div>
+
+<!-- сканирование карты -->
+<div class="screen scan" id="scanScreen">
+  <div class="scr-top"><button class="back" data-back="decksScreen">←</button></div>
+  <div class="scan-hint">НАВЕДИТЕ КАМЕРУ НА QR-КОД КАРТЫ</div>
+  <div class="viewfinder"><i></i><i></i><i></i><i></i></div>
+  <div class="ss-actions"><button class="btn ghost" id="scanManual">ВВЕСТИ КОД ВРУЧНУЮ</button></div>
+  <div class="added" id="cardAdded">
+    <div class="added-win">
+      <div class="added-title">КАРТА ДОБАВЛЕНА</div>
+      <div class="added-card" id="caCard"></div>
+      <div class="added-name" id="caName"></div>
+      <button class="btn" id="caOk">ОК</button>
+    </div>
   </div>
-  <div class="pvp-status" id="pvpStatus"></div>
+</div>
+
+<!-- профиль игрока -->
+<div class="screen" id="profileScreen">
+  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <div class="pf">
+    <img class="pf-av" src="img/avatar.png" alt="">
+    <div class="pf-hint">аватар пока один — сменить нельзя</div>
+    <input id="pfName" maxlength="24" placeholder="Имя игрока">
+    <div class="pf-rows" id="pfRows"></div>
+  </div>
 </div>
 
 <div class="screen" id="deckEditor">
@@ -444,7 +552,9 @@
 
   <button id="btnEnd">КОНЕЦ ХОДА</button>
 
-  <div id="over"><h1 id="overText">ПОБЕДА</h1><button id="btnAgain">ЕЩЁ РАЗ</button></div>
+  <div id="over"><h1 id="overText">ПОБЕДА</h1>
+    <button id="btnAgain">ЕЩЁ РАЗ</button>
+    <button id="btnMenu">В МЕНЮ</button></div>
 </div>
 
 <div id="rotate"><div class="ico">⟳</div><div>Поверните устройство<br>горизонтально</div></div>
@@ -971,6 +1081,8 @@ function render() {
   renderPending();
 
   if (S.winner !== null) {
+    // счёт для профиля: за бой засчитываем один раз
+    if (!S.counted) { S.counted = true; bumpStat(S.winner === 0 ? 'wins' : 'losses'); }
     $('overText').textContent = S.winner === 0 ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
     $('over').classList.add('show');
   }
@@ -1247,6 +1359,7 @@ $('btnAgain').onclick = () => {
   $('over').classList.remove('show');
   newGame(lastDeck, lastFoe);
 };
+$('btnMenu').onclick = () => { $('over').classList.remove('show'); goto('menuScreen'); };
 
 /* ---------- хранение колод ---------- */
 const DECKS_KEY = 'atlanteans_decks';
@@ -1291,10 +1404,34 @@ if (!lsGet(SEED_KEY)) {
 let chosenMe = -1;     // -1 — случайная колода
 let chosenFoe = -1;    // колода соперника (для отладки можно задать точно)
 
-/* ---------- стартовый экран ---------- */
-const startScreen = $('startScreen'), deckEditor = $('deckEditor');
-const showScreen = el => { $('startScreen').classList.remove('show');
-  $('deckEditor').classList.remove('show'); if (el) el.classList.add('show'); };
+/* ---------- экраны и переходы ----------
+   Состав и связи — из схемы в Figma (лист «схема»):
+   главный → PvE выбор колоды → бой; главный → PvP лобби (мультиплеер выключен);
+   главный → экран колод → редактор / сканирование; главный → профиль. */
+const deckEditor = $('deckEditor');
+const SCREENS = ['menuScreen', 'pveScreen', 'pvpScreen', 'decksScreen',
+                 'deckEditor', 'scanScreen', 'profileScreen'];
+// null — спрятать всё и показать бой
+function showScreen(el) {
+  SCREENS.forEach(id => $(id).classList.remove('show'));
+  if (el) el.classList.add('show');
+}
+const goto = id => {
+  if (id === 'pveScreen') renderStart();
+  if (id === 'decksScreen') renderDecks();
+  if (id === 'profileScreen') renderProfile();
+  showScreen($(id));
+};
+// стрелка «назад» есть на каждом экране, кроме главного
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-back]');
+  if (b) goto(b.dataset.back);
+});
+
+$('mmPve').onclick = () => goto('pveScreen');
+$('mmPvp').onclick = () => goto('pvpScreen');
+$('mmDecks').onclick = () => goto('decksScreen');
+$('mmProfile').onclick = () => goto('profileScreen');
 
 // кнопки выбора «мне» / «врагу» на каждой строке
 function pickBtns(idx) {
@@ -1302,6 +1439,7 @@ function pickBtns(idx) {
     `<button class="pick-side${cur === idx ? ' on' : ''}" data-side="${side}" data-idx="${idx}">${label}</button>`;
   return `<span class="pick-cell">${b('me', chosenMe, 'мне')}${b('foe', chosenFoe, 'врагу')}</span>`;
 }
+// PvE: только выбор колоды, правка колод живёт на экране колод
 function renderStart() {
   const rows = [`<div class="ss-item">
       <span class="ss-name">Случайная колода</span>
@@ -1311,35 +1449,81 @@ function renderStart() {
       <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
       <span class="ss-info">${d.cards.length} карт</span>
       ${pickBtns(i)}
-      <button class="btn ghost" data-edit="${i}" style="padding:8px 18px;font-size:22px">изменить</button>
-      ${d.starter ? '' : `<button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>`}
     </div>`));
   $('ssList').innerHTML = rows.join('');
 }
 $('ssList').addEventListener('click', e => {
-  const del = e.target.closest('[data-del]');
-  if (del) {
-    const i = +del.dataset.del;
-    decks.splice(i, 1); storeDecks();
-    if (chosenMe >= decks.length) chosenMe = -1;
-    if (chosenFoe >= decks.length) chosenFoe = -1;
-    renderStart(); return;
-  }
-  const edit = e.target.closest('[data-edit]');
-  if (edit) { openEditor(decks[+edit.dataset.edit]); return; }
   const side = e.target.closest('[data-side]');
-  if (side) {
-    const idx = +side.dataset.idx;
-    if (side.dataset.side === 'me') chosenMe = idx; else chosenFoe = idx;
-    renderStart();
-  }
+  if (!side) return;
+  const idx = +side.dataset.idx;
+  if (side.dataset.side === 'me') chosenMe = idx; else chosenFoe = idx;
+  renderStart();
 });
 const deckAt = i => (i >= 0 ? decks[i].cards : null);
 $('ssPlay').onclick = () => {
   showScreen(null);
   newGame(deckAt(chosenMe), deckAt(chosenFoe));
 };
-$('ssEdit').onclick = () => { openEditor(null); };   // новая колода с чистого листа
+
+/* ---------- экран колод ---------- */
+function renderDecks() {
+  $('dkList').innerHTML = decks.map((d, i) => `<div class="ss-item">
+      <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
+      <span class="ss-info">${d.cards.length} карт</span>
+      <span class="pick-cell">
+        <button class="btn ghost" data-edit="${i}" style="padding:8px 18px;font-size:22px">изменить</button>
+        ${d.starter ? '' : `<button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>`}
+      </span>
+    </div>`).join('');
+}
+$('dkList').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const i = +del.dataset.del;
+    decks.splice(i, 1); storeDecks();
+    if (chosenMe >= decks.length) chosenMe = -1;
+    if (chosenFoe >= decks.length) chosenFoe = -1;
+    renderDecks(); return;
+  }
+  const edit = e.target.closest('[data-edit]');
+  if (edit) openEditor(decks[+edit.dataset.edit]);
+});
+$('dkNew').onclick = () => openEditor(null);          // новая колода с чистого листа
+$('dkScan').onclick = () => goto('scanScreen');
+
+/* ---------- сканирование карты ----------
+   Камеры и разбора QR тут нет (см. PROJECT.md, раздел 9, пункт 4) — только
+   ручной ввод номера карты, чтобы пройти экраны схемы целиком. */
+$('scanManual').onclick = () => {
+  const raw = prompt('Введите номер карты (1–84):');
+  if (raw === null) return;
+  const key = BY_NO[+String(raw).trim()];
+  if (!key) { alert('Карта с таким номером не найдена'); return; }
+  $('caCard').innerHTML = cardHTML(key);
+  $('caName').textContent = `${DB[key].title} — добавлена в коллекцию`;
+  $('cardAdded').classList.add('show');
+};
+$('caOk').onclick = () => { $('cardAdded').classList.remove('show'); goto('decksScreen'); };
+
+/* ---------- профиль ---------- */
+const PROFILE_KEY = 'atlanteans_profile';
+function loadProfile() {
+  try { return JSON.parse(lsGet(PROFILE_KEY)) || {}; } catch (e) { return {}; }
+}
+let profile = loadProfile();
+function storeProfile() { lsSet(PROFILE_KEY, JSON.stringify(profile)); }
+function bumpStat(k) { profile[k] = (profile[k] || 0) + 1; storeProfile(); }
+function renderProfile() {
+  $('pfName').value = profile.name || '';
+  const rows = [['Побед', profile.wins || 0], ['Поражений', profile.losses || 0],
+                ['Карт в игре', CARD_KEYS.length]];
+  $('pfRows').innerHTML = rows.map(([k, v]) =>
+    `<div class="pf-row"><span>${k}</span><b>${v}</b></div>`).join('');
+}
+$('pfName').addEventListener('input', () => {
+  profile.name = $('pfName').value.trim();
+  storeProfile();
+});
 
 /* ---------- редактор колод ---------- */
 let edDeck = [], edIndex = -1;
@@ -1419,7 +1603,7 @@ $('edPaste').onclick = () => {
 };
 
 $('edClear').onclick = () => { edDeck = []; renderEditor(); };
-$('edBack').onclick = () => { renderStart(); showScreen(startScreen); };
+$('edBack').onclick = () => goto('decksScreen');   // редактор открывается только с экрана колод
 $('edSave').onclick = () => {
   if (!edDeck.length) return;
   const name = ($('edName').value || '').trim() || `Колода ${decks.length + 1}`;
@@ -1428,15 +1612,16 @@ $('edSave').onclick = () => {
   if (edIndex >= 0) decks[edIndex] = deck; else { decks.push(deck); edIndex = decks.length - 1; }
   storeDecks();
   chosenMe = edIndex;
-  renderStart();
-  showScreen(startScreen);
+  goto('decksScreen');
 };
 
-// бой НЕ запускаем при загрузке — только после выбора колоды на стартовом экране
-renderStart();
-showScreen(startScreen);
+// бой НЕ запускаем при загрузке — открывается главный экран
+goto('menuScreen');
 </script>
-<!-- сетевой слой грузится последним: ему нужны движок и экраны, объявленные выше -->
+<!-- Мультиплеер выключен по просьбе заказчика: экран PvP есть, лобби пустое.
+     Сетевой слой (proto/net.js) и сервер-релей (relay.js) остались в репозитории.
+     Чтобы включить обратно: вернуть строку ниже и блок кнопок PvP на экране PvP.
 <script src="net.js"></script>
+-->
 </body>
 </html>
