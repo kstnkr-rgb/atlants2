@@ -116,17 +116,25 @@ function showModal(title, text, buttons) {
 const hideModal = () => { modal.classList.remove('show'); askedFrom = null; };
 
 /* ---------- лобби ---------- */
+// строка как в макете: аватар, имя со статусом под ним, кнопка вызова справа
 function renderLobby(s) {
   if (!s.players.length) { listEl.innerHTML = '<div class="empty">Пусто</div>'; return; }
-  listEl.innerHTML = s.players.map(p => `<div class="ss-item${p.me ? ' self' : ''}">
-      <span class="ss-name">${p.name}</span>
+  listEl.innerHTML = s.players.map(p => {
+    const state = p.busy ? 'в бою' : 'в сети';
+    return `<div class="ss-item${p.me ? ' self' : ''}">
+      <img class="lb-av" src="img/avatar.png" alt="">
+      <span class="lb-who">
+        <b class="ss-name">${p.name}</b>
+        <i class="lb-state ${p.busy ? 'busy' : 'on'}">${state}</i>
+      </span>
       ${p.me ? '<span class="ss-you">ЭТО ВЫ</span>' : ''}
       <span class="pick-cell">${
         p.me ? '' :
-        p.busy ? '<span class="ss-busy">в бою</span>'
-               : `<button class="btn ghost" data-call="${p.id}" style="padding:8px 22px;font-size:22px">ВЫЗВАТЬ</button>`
+        p.busy ? '<button class="btn ghost" disabled style="padding:8px 22px;font-size:22px">ЗАНЯТ</button>'
+               : `<button class="btn" data-call="${p.id}" style="padding:8px 22px;font-size:22px">ВЫЗВАТЬ</button>`
       }</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 listEl.addEventListener('click', async e => {
   const b = e.target.closest('[data-call]');

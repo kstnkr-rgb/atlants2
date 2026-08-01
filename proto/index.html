@@ -286,10 +286,22 @@
   .pvp-status { flex:0 0 auto; text-align:center; font-size:26px; color:#D9A847;
     min-height:34px; margin-top:14px; }
   .pvp-status.bad { color:#e07a63; }
-  /* строка игрока в лобби: своя помечена и без кнопки вызова */
+  /* строка игрока в лобби: аватар, имя со статусом, кнопка вызова — как в макете.
+     Своя строка помечена и без кнопки (по отдельной просьбе заказчика). */
   .ss-item.self { border-color:rgba(217,168,71,.5); background:rgba(217,168,71,.10); }
   .ss-item .ss-you { font-size:22px; color:#D9A847; letter-spacing:2px; }
   .ss-item .ss-busy { font-size:22px; color:#8b7f6d; }
+  #stage .lb-av { position:static; flex:0 0 auto; width:72px; height:72px; border-radius:50%;
+    object-fit:cover; border:2px solid #D9A847; }
+  .lb-who { display:flex; flex-direction:column; gap:2px; }
+  .lb-state { font-style:normal; font-size:20px; color:#8b7f6d; }
+  .lb-state.on { color:#5db07a; }
+  .lb-state.busy { color:#c08c80; }
+  .pvp-hint { flex:0 0 auto; text-align:center; font-size:22px; color:#a09383; margin-top:12px; }
+  /* «изменить» на экране колод — квадратная кнопка с карандашом, как в макете */
+  .ed-pencil { width:56px; height:56px; padding:0; font-size:26px; line-height:1;
+    border-radius:10px; background:rgba(45,30,28,.9); color:#D9A847;
+    box-shadow:inset 0 0 0 2px #D9A847; border:none; cursor:pointer; }
 
   /* окно запроса на бой и ожидания — оформление как у окон старой игры */
   .pmodal { position:absolute; inset:0; z-index:1400; background:rgba(6,4,4,.72);
@@ -301,24 +313,28 @@
   .pmodal-text { color:#FFE8AC; font-size:30px; margin:22px 0 30px; }
   .pmodal-btns { display:flex; gap:20px; justify-content:center; }
 
-  /* главный экран */
-  .screen.menu { padding:0; }
-  .menu-hero { position:absolute; left:-4%; bottom:-6%; height:112%; width:auto;
-    pointer-events:none; }
-  .menu-side { position:absolute; right:6%; top:50%; transform:translateY(-50%);
-    width:min(46%, 620px); display:flex; flex-direction:column; align-items:stretch; gap:14px; }
-  /* #stage img задан absolute и бьёт классы по специфичности — возвращаем в поток */
-  #stage .menu-logo { position:relative; width:60%; align-self:center; height:auto; }
-  .menu-sub { text-align:center; color:#D9A847; font-size:30px; font-weight:800;
-    letter-spacing:10px; margin:-6px 0 18px; }
-  /* три пункта меню выглядят одинаково: тёмная плашка в золотой рамке */
-  .menu-btn { font-size:30px; letter-spacing:4px; padding:20px 0;
-    background:rgba(36,14,17,.92); color:#FFE8AC; box-shadow:inset 0 0 0 3px #D9A847; }
+  /* ---------- главный экран ----------
+     Экран лежит внутри #stage, а значит в той же системе координат, что и макет
+     (2597,4 × 1568,8). Поэтому все слои расставлены точными координатами из Figma,
+     а не процентами — совпадает один в один. Шапки на этом экране нет. */
+  .screen.menu { padding:0; background:#0a0d10; }
+  .screen.menu::before { content:none; }
+  .menu-bg     { left:-106px; top:0;    width:2810px; height:1580px; }
+  .menu-zeus   { left:-424px; top:-125px; width:1842px; height:2692px; }
+  .menu-athena { left:1372px; top:29px;   width:1690px; height:2470px; }
+  .menu-veil   { position:absolute; inset:0; background:rgba(10,6,7,.38); }
+  #stage .menu-logo { left:853px; top:-41px; width:934px; height:auto; }
+  .menu-btns { position:absolute; left:820px; top:966px; width:1000px;
+    display:flex; flex-direction:column; gap:30px; }
+  /* три пункта меню одинаковые — по отдельной просьбе заказчика.
+     В макете у «КОЛОДА» осталась подсветка от первой версии, здесь её нет. */
+  .menu-btn { height:150px; padding:0; border-radius:8px; font-size:54px; font-weight:600;
+    letter-spacing:2px; background:rgba(28,16,18,.8); color:#FFE8AC;
+    box-shadow:inset 0 0 0 3px #D9A847; }
   .menu-btn:active { background:rgba(74,23,27,.95); }
-  .avatar-btn { position:absolute; right:34px; top:28px; width:86px; height:86px; padding:0;
-    border-radius:50%; border:3px solid #D9A847; background:#1a1113; cursor:pointer;
-    overflow:hidden; }
-  .avatar-btn img { width:100%; height:100%; object-fit:cover; display:block; }
+  .avatar-btn { position:absolute; left:2283px; top:40px; width:230px; height:230px; padding:0;
+    border:none; background:none; cursor:pointer; }
+  #stage .avatar-btn img { position:static; width:100%; height:100%; display:block; }
 
   /* сканирование карты */
   .screen.scan { background-image:url("img/scan_bg.png"); }
@@ -483,17 +499,20 @@
 
 <!-- ЭКРАНЫ ПО СХЕМЕ ИЗ FIGMA (лист «схема», фрейм «схема экранов — графика») -->
 
-<!-- главный экран -->
+<!-- главный экран. Слои и координаты один в один из макета (лист «схема»):
+     фон и бойцы те же, что в бою; шапки тут нет. -->
 <div class="screen menu" id="menuScreen">
-  <img class="menu-hero" src="img/zeus.png" alt="">
-  <div class="menu-side">
-    <img class="menu-logo" src="img/logo.png" alt="">
-    <div class="menu-sub">ДУЭЛИ БОГОВ</div>
+  <img class="menu-bg" src="img/bg.png" alt="">
+  <img class="menu-zeus" src="img/zeus.png" alt="">
+  <img class="menu-athena" src="img/athena.png" alt="">
+  <div class="menu-veil"></div>
+  <img class="menu-logo" src="img/logo.png" alt="Атланты: Дуэли богов">
+  <div class="menu-btns">
     <button class="btn menu-btn" id="mmDecks">КОЛОДА</button>
     <button class="btn menu-btn" id="mmPvp">PvP</button>
     <button class="btn menu-btn" id="mmPve">PvE</button>
   </div>
-  <button class="avatar-btn" id="mmProfile" title="Профиль"><img src="img/avatar.png" alt=""></button>
+  <button class="avatar-btn" id="mmProfile" title="Профиль"><img src="img/icon_profile.png" alt=""></button>
 </div>
 
 <!-- PvE: выбор колоды перед боем с ботом -->
@@ -509,6 +528,7 @@
   <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
   <div class="ss-sub">ИГРОКИ ОНЛАЙН:</div>
   <div class="ss-list" id="pvpList"><div class="empty">Пусто</div></div>
+  <div class="pvp-hint">выберите соперника из списка — ему придёт запрос на бой</div>
   <div class="pvp-status" id="pvpStatus"></div>
 </div>
 
@@ -563,7 +583,7 @@
   <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
   <div class="pf">
     <img class="pf-av" src="img/avatar.png" alt="">
-    <div class="pf-hint">аватар пока один — сменить нельзя</div>
+    <div class="pf-hint">нажмите, чтобы сменить аватар</div>
     <input id="pfName" maxlength="24" placeholder="Имя игрока">
     <div class="pf-rows" id="pfRows"></div>
   </div>
@@ -1312,8 +1332,8 @@ function renderDecks() {
       <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
       <span class="ss-info">${d.cards.length} карт</span>
       <span class="pick-cell">
-        <button class="btn ghost" data-edit="${i}" style="padding:8px 18px;font-size:22px">изменить</button>
-        ${d.starter ? '' : `<button class="btn ghost" data-del="${i}" style="padding:8px 18px;font-size:22px">✕</button>`}
+        <button class="ed-pencil" data-edit="${i}" title="изменить">✎</button>
+        ${d.starter ? '' : `<button class="ed-pencil" data-del="${i}" title="удалить">✕</button>`}
       </span>
     </div>`).join('');
 }
@@ -1357,7 +1377,7 @@ function bumpStat(k) { profile[k] = (profile[k] || 0) + 1; storeProfile(); }
 function renderProfile() {
   $('pfName').value = profile.name || '';
   const rows = [['Побед', profile.wins || 0], ['Поражений', profile.losses || 0],
-                ['Карт в игре', CARD_KEYS.length]];
+                ['Карт в коллекции', CARD_KEYS.length]];
   $('pfRows').innerHTML = rows.map(([k, v]) =>
     `<div class="pf-row"><span>${k}</span><b>${v}</b></div>`).join('');
 }
