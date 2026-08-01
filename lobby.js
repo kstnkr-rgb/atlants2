@@ -12,6 +12,7 @@
 */
 const crypto = require('crypto');
 const M = require('./matches.js');
+const store = require('./store.js');
 
 const PRESENCE_MS = 15 * 1000;   // молчит дольше — пропал из списка
 const INVITE_MS   = 30 * 1000;   // столько живёт вызов
@@ -140,18 +141,19 @@ function answer(id, ok) {
 }
 
 /* ---------- выбор колоды и старт ----------
-   Колода приходит от клиента и проверяется тут же; на сервере её пока не
-   хранят — это шаг 5. Бой рождается, когда готовы оба. */
-function ready(id, pairId, deck) {
+   Клиент называет колоду только по номеру. Состав берётся из серверного
+   хранилища и там же сверяется с коллекцией игрока — прислать «свою» колоду
+   из карт, которых у него нет, невозможно. Бой рождается, когда готовы оба. */
+function ready(id, pairId, deckId) {
   sweep();
   const me = players.get(id);
   if (!me) return { err: 'вы не в лобби' };
   const pair = pairs.get(pairId);
   if (!pair || me.pairId !== pairId) return { err: 'бой отменён' };
-  const bad = M.validateDeck(deck);
-  if (bad) return { err: bad };
+  const cards = store.deckCards(id, deckId);
+  if (!cards) return { err: 'колода не найдена или собрана не из ваших карт' };
 
-  pair.decks[id] = deck;
+  pair.decks[id] = cards;
   const otherId = pair.a === id ? pair.b : pair.a;
   if (!pair.decks[otherId]) return { waiting: true };
 

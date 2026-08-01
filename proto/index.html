@@ -789,6 +789,9 @@ const NET = {
   push() {},       // не используется в режиме 'net'
   send() {},       // отправить намерение серверу
   leave() {},      // выйти из сетевого боя
+  // колоды: пока сессии нет — localStorage, с сессией источник правды сервер
+  online: false,
+  saveDeck() {}, delDeck() {}, setName() {},
 };
 // тонкие обёртки: подставляют текущее состояние и набор UI в общие правила
 const startTurn = i => RULES.startTurn(S, i, UI);
@@ -1318,6 +1321,7 @@ $('dkList').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) {
     const i = +del.dataset.del;
+    if (NET.online) { NET.delDeck(decks[i].id); return; }
     decks.splice(i, 1); storeDecks();
     if (chosenMe >= decks.length) chosenMe = -1;
     if (chosenFoe >= decks.length) chosenFoe = -1;
@@ -1360,6 +1364,7 @@ function renderProfile() {
 $('pfName').addEventListener('input', () => {
   profile.name = $('pfName').value.trim();
   storeProfile();
+  NET.setName(profile.name);      // имя видно соперникам в лобби
 });
 
 /* ---------- редактор колод ---------- */
@@ -1444,6 +1449,13 @@ $('edBack').onclick = () => goto('decksScreen');   // редактор откр�
 $('edSave').onclick = () => {
   if (!edDeck.length) return;
   const name = ($('edName').value || '').trim() || `Колода ${decks.length + 1}`;
+  // с сессией колода уезжает на сервер: там она сверяется с коллекцией игрока
+  if (NET.online) {
+    const id = edIndex >= 0 ? decks[edIndex].id : null;
+    NET.saveDeck({ id, name, cards: edDeck.slice() });
+    goto('decksScreen');
+    return;
+  }
   const deck = { name, cards: edDeck.slice() };
   if (edIndex >= 0 && decks[edIndex].starter) deck.starter = true;   // стартовая остаётся стартовой
   if (edIndex >= 0) decks[edIndex] = deck; else { decks.push(deck); edIndex = decks.length - 1; }

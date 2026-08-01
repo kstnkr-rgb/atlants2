@@ -5,10 +5,11 @@
   "main": "relay.js",
   "scripts": {
     "start": "node relay.js",
-    "test": "node proto/proto-test.js && node match-test.js && node lobby-test.js",
+    "test": "node proto/proto-test.js && node match-test.js && node lobby-test.js && node store-test.js",
     "test:rules": "node proto/proto-test.js",
     "test:match": "node match-test.js",
     "test:lobby": "node lobby-test.js",
+    "test:store": "node store-test.js",
     "arbiter": "node server.js",
     "test:arbiter": "node test-engine.js"
   }

@@ -2,11 +2,13 @@
 /*
   Сервер игры: статика + HTTP поверх лобби и сервера матчей.
 
-  1. /api/lobby, /api/invite, /api/answer, /api/ready, /api/leave — лобби.js:
+  1. /api/session — auth.js: личность из подписанного токена МП.
+  2. /api/lobby, /api/invite, /api/answer, /api/ready, /api/leave — lobby.js:
      присутствие, вызовы по id, согласование колод.
-  2. /api/match/* — matches.js: бой считается здесь, каждое действие проверяется
+     /api/decks* — store.js: колоды и коллекция игрока.
+  3. /api/match/* — matches.js: бой считается здесь, каждое действие проверяется
      (PROJECT.md, раздел 14).
-  3. /api/create, /api/join, /api/push, /api/act, /api/poll — СТАРЫЙ релей
+  4. /api/create, /api/join, /api/push, /api/act, /api/poll — СТАРЫЙ релей
      «по коду комнаты»: правил не знает, бой считал браузер хоста. Никем больше
      не используется, оставлен до отдельной уборки.
 
@@ -18,6 +20,8 @@ const path = require('path');
 const crypto = require('crypto');
 const M = require('./matches.js');
 const L = require('./lobby.js');
+const A = require('./auth.js');
+const store = require('./store.js');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 3000;
@@ -103,60 +107,90 @@ const api = {
   },
 };
 
+/* ---------- сессия и личность ----------
+   Кто пришёл, решает сервер по токену сессии. playerId от клиента не
+   принимается нигде: подделать его нельзя (PROJECT.md, раздел 14.3). */
+const authApi = {
+  // МП открывает WebView и передаёт подписанный токен; без ATL_SECRET — режим разработки
+  session(body) {
+    const r = A.openSession(body);
+    if (r.err) return r;
+    store.setName(r.playerId, r.name);
+    return { session: r.session, playerId: r.playerId, name: r.name, dev: r.dev };
+  },
+};
+
+// кто это; { err } — если сессии нет
+const who = body => {
+  const s = A.whoIs(body && body.session);
+  return s || null;
+};
+const NO_SESSION = { err: 'сессия не найдена, откройте игру заново' };
+
 /* ---------- лобби ----------
    Присутствие держится опросом /api/lobby, он же приносит вызовы, пару
    и готовый бой. Кодов комнат нет: вызывают по id из списка. */
 const lobbyApi = {
   lobby(body) {
-    const h = L.hello(body.playerId, body.name);
+    const s = who(body); if (!s) return NO_SESSION;
+    const p = store.getPlayer(s.playerId);
+    const h = L.hello(s.playerId, p.name || s.name);
     if (h.err) return h;
-    return L.snapshot(String(body.playerId));
+    return L.snapshot(s.playerId);
   },
-  invite(body) { return L.invite(String(body.playerId), String(body.to)); },
-  answer(body) { return L.answer(String(body.playerId), !!body.ok); },
-  ready(body)  { return L.ready(String(body.playerId), String(body.pairId), body.deck); },
-  leave(body)  { return L.leave(String(body.playerId)); },
+  invite(body) { const s = who(body); return s ? L.invite(s.playerId, String(body.to)) : NO_SESSION; },
+  answer(body) { const s = who(body); return s ? L.answer(s.playerId, !!body.ok) : NO_SESSION; },
+  ready(body)  { const s = who(body); return s ? L.ready(s.playerId, String(body.pairId), String(body.deckId)) : NO_SESSION; },
+  leave(body)  { const s = who(body); return s ? L.leave(s.playerId) : NO_SESSION; },
+};
+
+/* ---------- колоды и коллекция ----------
+   Колоды живут на сервере и сверяются с коллекцией игрока. */
+const deckApi = {
+  decks(body) {
+    const s = who(body); if (!s) return NO_SESSION;
+    return store.listDecks(s.playerId);
+  },
+  'decks/save'(body) {
+    const s = who(body); if (!s) return NO_SESSION;
+    return store.saveDeck(s.playerId, body.deck || {});
+  },
+  'decks/del'(body) {
+    const s = who(body); if (!s) return NO_SESSION;
+    return store.delDeck(s.playerId, String(body.deckId));
+  },
+  'decks/name'(body) {
+    const s = who(body); if (!s) return NO_SESSION;
+    store.setName(s.playerId, body.name);
+    return { ok: true };
+  },
 };
 
 /* ---------- сервер матчей ----------
    Сторона определяется по токену, выданному при создании боя. playerId,
    присланный клиентом, сам по себе не принимается: подделать его нельзя.
-   Колоды пока приходят от клиента — серверное хранилище это шаг 5. */
+   Бои рождает только лобби — отдельного «создать бой» снаружи нет. */
 const matchApi = {
-  // создать бой напрямую, минуя лобби; используется тестами
-  // создать бой; в ответ два токена — по одному каждой стороне
-  'match/new'(body) {
-    const a = body.a, b = body.b;
-    if (!a || !a.id || !b || !b.id) return { err: 'нужны оба игрока' };
-    if (a.id === b.id) return { err: 'игрок не может биться сам с собой' };
-    const { match, err } = M.createMatch(
-      { id: String(a.id), name: String(a.name || a.id) },
-      { id: String(b.id), name: String(b.name || b.id) },
-      body.deckA, body.deckB, body.seed);
-    if (err) return { err };
-    return { matchId: match.id, tokens: { a: match.tokens[0], b: match.tokens[1] } };
-  },
-
   // текущее состояние глазами игрока: туман войны уже наложен
   'match/state'(body) {
     const m = M.get(body.matchId);
     if (!m) return { err: 'бой не найден' };
-    const who = M.playerByToken(m, body.token);
-    if (!who) return { err: 'нет доступа' };
-    return M.viewFor(m, who, body.logFrom);
+    const side = M.playerByToken(m, body.token);
+    if (!side) return { err: 'нет доступа' };
+    return M.viewFor(m, side, body.logFrom);
   },
 
   // намерение игрока: сыграть карту, взять новую, закончить ход, сдаться
   async 'match/act'(body) {
     const m = M.get(body.matchId);
     if (!m) return { err: 'бой не найден' };
-    const who = M.playerByToken(m, body.token);
-    if (!who) return { err: 'нет доступа' };
-    return M.applyAction(m, who, body.seq, body.act);
+    const side = M.playerByToken(m, body.token);
+    if (!side) return { err: 'нет доступа' };
+    return M.applyAction(m, side, body.seq, body.act);
   },
 };
 
-setInterval(() => { M.sweep(); L.sweep(); }, 30 * 1000).unref();
+setInterval(() => { M.sweep(); L.sweep(); A.sweep(); }, 30 * 1000).unref();
 
 /** Опрос — один на обе стороны; что вернуть, зависит от роли. */
 function poll(q) {
@@ -253,7 +287,7 @@ const server = http.createServer(async (req, res) => {
 
   const name = url.pathname.startsWith('/api/') ? url.pathname.slice(5) : null;
   if (name) {
-    const handler = lobbyApi[name] || matchApi[name] || api[name];
+    const handler = authApi[name] || lobbyApi[name] || deckApi[name] || matchApi[name] || api[name];
     if (req.method !== 'POST' || !handler) { sendJson(res, { err: 'неизвестный запрос' }); return; }
     try {
       sendJson(res, await handler(await readBody(req)));

@@ -3,6 +3,7 @@
 // отказы, согласование колод и рождение боя.
 const L = require('./lobby.js');
 const M = require('./matches.js');
+const store = require('./store.js');
 const RULES = require('./proto/rules.js');
 const { CARD_KEYS } = require('./proto/cards.js');
 
@@ -19,6 +20,9 @@ const deck = () => {
 
 /* ---------- присутствие ---------- */
 L._reset();
+store._reset();
+// колоды теперь живут на сервере, в бой уходит их серверный состав
+const deckIdOf = id => store.saveDeck(id, { name: 'бой', cards: deck() }).deck.id;
 L.hello('a', 'Аня');
 L.hello('b', 'Боря');
 let sa = L.snapshot('a');
@@ -69,13 +73,14 @@ check('оба помечены занятыми', L.snapshot('c').players.filter
 check('занятого вызвать нельзя', !!L.invite('c', 'a').err);
 
 /* ---------- выбор колоды ---------- */
-check('кривая колода отклоняется', !!L.ready('a', ans.pairId, ['a1']).err);
-const r1 = L.ready('a', ans.pairId, deck());
+check('выдуманный номер колоды отклоняется', !!L.ready('a', ans.pairId, 'нет-такой').err);
+const dA = deckIdOf('a'), dB = deckIdOf('b');
+const r1 = L.ready('a', ans.pairId, dA);
 check('первый готов — ждём второго', r1.waiting === true, JSON.stringify(r1));
 check('своя готовность видна', L.snapshot('a').pair.mineReady === true);
-check('чужой pairId не принимается', !!L.ready('a', 'чужой', deck()).err);
+check('чужой pairId не принимается', !!L.ready('a', 'чужой', dA).err);
 
-const r2 = L.ready('b', ans.pairId, deck());
+const r2 = L.ready('b', ans.pairId, dB);
 check('второй готов — бой создан', !!r2.matchId && !!r2.token, JSON.stringify(r2));
 sa = L.snapshot('a');
 check('первый получил бой опросом', !!sa.match && sa.match.matchId === r2.matchId, JSON.stringify(sa.match));

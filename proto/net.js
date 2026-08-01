@@ -44,26 +44,59 @@ let timer = null, inFlight = false;
 let pairId = null, matchId = null, token = null;
 let seq = 0, logFrom = 0, lastPlayN = 0, counted = false, entered = false;
 let askedFrom = null;     // чей запрос сейчас показан в окне
+let session = null;       // токен сессии: им подписан каждый запрос
 
 /* ---------- кто я ----------
-   Учётной записи в прототипе нет: до интеграции с «Клубом Друзей» хватает
-   случайного номера, лежащего в этом же браузере. */
-function myId() {
+   В продукте id приходит из «Клуба Друзей»: приложение открывает WebView
+   с подписанным токеном в ?u=. Сервер проверяет подпись и выдаёт сессию.
+   Без токена сервер пускает только в режиме разработки (без ATL_SECRET),
+   и тогда игрок опознаётся случайным номером из этого же браузера. */
+function devId() {
   let id = lsGet('atlanteans_player');
   if (!id) { id = 'p' + Math.random().toString(36).slice(2, 8); lsSet('atlanteans_player', id); }
   return id;
 }
 function myName() {
   const p = (() => { try { return JSON.parse(lsGet('atlanteans_profile')) || {}; } catch (e) { return {}; } })();
-  return (p.name || '').trim() || 'Игрок ' + myId().slice(1, 4);
+  return (p.name || '').trim() || 'Игрок ' + devId().slice(1, 4);
 }
-function myDeck() {
-  const d = deckAt(chosenMe);
-  if (d && d.length === DECK_SIZE) return d.slice();
-  const starter = decks.find(x => x.starter);
-  if (starter && starter.cards.length === DECK_SIZE) return starter.cards.slice();
-  return buildDeck();
+
+/* ---------- сессия и колоды на сервере ----------
+   Пока сессии нет, игра работает как раньше: колоды в localStorage, бой с ботом.
+   С сессией источник правды — сервер: он же сверяет колоду с коллекцией. */
+const UPLOADED = 'atlanteans_uploaded';
+
+async function pullDecks() {
+  const r = await call('decks', { session });
+  if (r.err) return;
+  decks = r.decks;                       // у серверных колод есть id
+  chosenMe = Math.min(chosenMe, decks.length - 1);
+  renderStart(); renderDecks();
+  if ($('pvpDeckList').innerHTML) renderPvpDecks();
 }
+
+// один раз переносим колоды, собранные до появления сессии
+async function pushLocalDecks() {
+  if (lsGet(UPLOADED)) return;
+  lsSet(UPLOADED, '1');
+  const mine = decks.filter(d => !d.starter && !d.id && d.cards && d.cards.length === DECK_SIZE);
+  for (const d of mine) await call('decks/save', { session, deck: { name: d.name, cards: d.cards } });
+}
+
+async function openSession() {
+  const u = qs.get('u');                 // подписанный токен от «Клуба Друзей»
+  const body = u ? { token: u } : { id: devId(), name: myName() };
+  const r = await call('session', body);
+  if (r.err) return;                     // сервера нет или подпись не сошлась — играем локально
+  session = r.session;
+  NET.online = true;
+  NET.saveDeck = async deck => { const s = await call('decks/save', { session, deck }); if (!s.err) await pullDecks(); };
+  NET.delDeck  = async id   => { const s = await call('decks/del', { session, deckId: id }); if (!s.err) await pullDecks(); };
+  NET.setName  = name => { call('decks/name', { session, name }).catch(() => {}); };
+  await pushLocalDecks();
+  await pullDecks();
+}
+openSession().catch(() => {});
 
 /* ---------- окно запроса и ожидания ---------- */
 const modal = $('pmodal');
@@ -98,7 +131,7 @@ function renderLobby(s) {
 listEl.addEventListener('click', async e => {
   const b = e.target.closest('[data-call]');
   if (!b) return;
-  const r = await call('invite', { playerId: myId(), to: b.dataset.call });
+  const r = await call('invite', { session, to: b.dataset.call });
   say(r.err || 'вызов отправлен, ждём ответа', !!r.err);
 });
 
@@ -116,12 +149,12 @@ function onLobby(s) {
     showModal('ЗАПРОС НА БОЙ', `${s.invite.name} прислал вам запрос`, [
       ['ДА', false, async () => {
         hideModal();
-        const r = await call('answer', { playerId: myId(), ok: true });
+        const r = await call('answer', { session, ok: true });
         if (r.err) say(r.err, true);
       }],
       ['ОТКЛОНИТЬ', true, async () => {
         hideModal();
-        await call('answer', { playerId: myId(), ok: false });
+        await call('answer', { session, ok: false });
       }],
     ]);
   }
@@ -163,11 +196,13 @@ $('pvpDeckList').addEventListener('click', e => {
 });
 $('pvpPlay').onclick = async () => {
   if (!pairId) return;
-  const r = await call('ready', { playerId: myId(), pairId, deck: myDeck() });
+  const chosen = decks[chosenMe] || decks.find(d => d.starter) || decks[0];
+  if (!chosen || !chosen.id) { deckStatusEl.textContent = 'выберите колоду'; return; }
+  const r = await call('ready', { session, pairId, deckId: chosen.id });
   if (r.err) { deckStatusEl.textContent = r.err; return; }
   if (r.matchId) { enterBattle(r); return; }
   showModal('ОЖИДАНИЕ', 'Ожидаем второго игрока', [
-    ['ОТМЕНА', true, async () => { hideModal(); await call('leave', { playerId: myId() }); phase = 'lobby'; goto('pvpScreen'); }],
+    ['ОТМЕНА', true, async () => { hideModal(); await call('leave', { session }); phase = 'lobby'; goto('pvpScreen'); }],
   ]);
 };
 
@@ -241,7 +276,7 @@ async function tick() {
     applyView(v);
     return;
   }
-  onLobby(await call('lobby', { playerId: myId(), name: myName() }));
+  onLobby(await call('lobby', { session }));
 }
 
 function restart(ms) {
@@ -268,7 +303,7 @@ function stopBattle() {
   matchId = null; token = null;
   NET.mode = 'local';
   phase = 'lobby';
-  call('leave', { playerId: myId() }).catch(() => {});
+  call('leave', { session }).catch(() => {});
   restart(LOBBY_MS);
 }
 
@@ -277,11 +312,11 @@ $('mmPvp').addEventListener('click', () => {
   if (phase === 'off') { phase = 'lobby'; say('ищем, кто в сети…'); restart(LOBBY_MS); }
 });
 document.querySelector('#pvpScreen [data-back]').addEventListener('click', () => {
-  call('leave', { playerId: myId() }).catch(() => {});
+  call('leave', { session }).catch(() => {});
   stopAll();
 });
 document.querySelector('#pvpDeckScreen [data-back]').addEventListener('click', () => {
-  call('leave', { playerId: myId() }).catch(() => {});
+  call('leave', { session }).catch(() => {});
   phase = 'lobby';
   pairId = null;
 });
