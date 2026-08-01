@@ -2,10 +2,10 @@
 /*
   Хранилище игроков: коллекция карт и колоды.
 
-  Зачем на сервере: пока колода приходит от клиента, он может прислать любую —
-  сервер проверит только размер и лимит копий, но не то, есть ли эти карты
-  у игрока. Здесь колода лежит на сервере, и в бой уходит серверная копия
-  (PROJECT.md, раздел 14).
+  Зачем на сервере: если колоду присылает клиент, он может прислать любую —
+  проверить размер можно, а вот есть ли у игрока эти карты, уже нет. Здесь
+  колода лежит на сервере, в бой уходит серверная копия, и она сверяется
+  с коллекцией владельца (PROJECT.md, раздел 14).
 
   Хранится в JSON-файле рядом с кодом. Для прототипа этого хватает; на боевом
   стенде это место заменит база — обращения к данным собраны в этом файле,
@@ -49,9 +49,12 @@ process.on('exit', save);
 function startCollection() {
   const col = {};
   if (START_COLLECTION === 'all') {
-    for (const k of CARD_KEYS) col[k] = RULES.MAX_COPIES;
+    // по колоде каждой карты: пока карт из QR нет, ограничивать нечем,
+    // а запас должен покрывать любую собираемую колоду
+    for (const k of CARD_KEYS) col[k] = RULES.DECK_SIZE;
   } else {
-    for (const k of STARTER_DECK) col[k] = Math.min(RULES.MAX_COPIES, (col[k] || 0) + 1);
+    // ровно столько, сколько в выданной стартовой колоде — там Щит восемь раз
+    for (const k of STARTER_DECK) col[k] = (col[k] || 0) + 1;
   }
   return col;
 }
@@ -88,17 +91,25 @@ function addCard(id, key) {
 }
 
 /* ---------- колоды ----------
-   Проверка строже, чем у matches.validateDeck: там только размер и лимит копий,
-   здесь ещё и наличие карт в коллекции игрока. */
-function checkDeck(p, cards) {
-  const base = RULES.MAX_COPIES;
+   Два разных вопроса, и путать их нельзя:
+
+   допуск в бой  — есть ли у игрока столько карт. Проверяется ВСЕГДА;
+   сборка колоды — лимит в 3 копии одной карты (`cardAddingLimit` из конфига).
+                   Проверяется только когда игрок сам собрал колоду в редакторе.
+
+   Выданная заказчиком стартовая колода лимит нарушает: там Щит восемь раз
+   (PROJECT.md, раздел 6). Она приходит от игры, а не собрана игроком, поэтому
+   в бой допускается — карты в коллекции на неё есть. */
+function checkDeck(p, cards, building) {
   if (!Array.isArray(cards)) return 'колода не передана';
   if (cards.length !== RULES.DECK_SIZE) return `в колоде должно быть ${RULES.DECK_SIZE} карт, а не ${cards.length}`;
   const used = {};
   for (const k of cards) {
     if (!CARDS[k]) return `неизвестная карта: ${k}`;
     used[k] = (used[k] || 0) + 1;
-    if (used[k] > base) return `больше ${base} копий карты «${CARDS[k].title}»`;
+    if (building && used[k] > RULES.MAX_COPIES) {
+      return `больше ${RULES.MAX_COPIES} копий карты «${CARDS[k].title}»`;
+    }
     if (used[k] > (p.collection[k] || 0)) return `карты «${CARDS[k].title}» у вас меньше`;
   }
   return null;
@@ -112,7 +123,7 @@ function listDecks(id) {
 
 function saveDeck(id, deck) {
   const p = getPlayer(id);
-  const bad = checkDeck(p, deck && deck.cards);
+  const bad = checkDeck(p, deck && deck.cards, true);   // игрок собрал сам — лимит копий действует
   if (bad) return { err: bad };
   const name = String((deck.name || '').trim() || 'Колода').slice(0, 24);
 
@@ -144,7 +155,7 @@ function deckCards(id, deckId) {
   const p = getPlayer(id);
   const d = p.decks.find(x => x.id === deckId);
   if (!d) return null;
-  return checkDeck(p, d.cards) ? null : d.cards.slice();
+  return checkDeck(p, d.cards, false) ? null : d.cards.slice();
 }
 
 function addResult(id, win) {

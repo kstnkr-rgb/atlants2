@@ -3,7 +3,7 @@
 // номера действий, таймеры ходов, воспроизводимость по зерну.
 const M = require('./matches.js');
 const RULES = require('./proto/rules.js');
-const { CARDS, CARD_KEYS } = require('./proto/cards.js');
+const { CARDS, CARD_KEYS, STARTER_DECK } = require('./proto/cards.js');
 
 let fails = 0;
 const check = (name, cond, extra = '') => {
@@ -29,8 +29,10 @@ const deck = () => {
   check('колода на 20 карт принимается', M.validateDeck(deck()) === null, String(M.validateDeck(deck())));
   check('колода на 21 карту отклоняется', !!M.validateDeck(deck().concat(CARD_KEYS[0])));
   check('колода на 19 карт отклоняется', !!M.validateDeck(deck().slice(0, 19)));
-  check('четыре копии одной карты отклоняются',
-    !!M.validateDeck(Array(4).fill('a1').concat(deck().slice(0, 16))));
+  // лимит копий — правило сборки, а не допуска в бой: выданная стартовая
+  // колода его нарушает и всё равно обязана играть
+  check('стартовая колода допускается в бой', M.validateDeck(STARTER_DECK) === null,
+    String(M.validateDeck(STARTER_DECK)));
   check('несуществующая карта отклоняется',
     !!M.validateDeck(['нетакой'].concat(deck().slice(0, 19))));
   check('бой с кривой колодой не создаётся', !!M.createMatch(A, B, deck().slice(0, 5), deck()).err);

@@ -30,17 +30,17 @@ function seeded(seed) {
 }
 
 /* ---------- проверка колоды ----------
-   Колода приходит от клиента, значит ей нельзя верить: сверяем размер,
-   лимит копий и что все карты вообще существуют. */
+   Сверяем размер и что все карты существуют.
+
+   Лимит в 3 копии здесь НЕ проверяется намеренно: это правило СБОРКИ колоды
+   (`cardAddingLimit` из конфига), а не допуска в бой. Выданная заказчиком
+   стартовая колода его нарушает — там Щит восемь раз (PROJECT.md, раздел 6).
+   Лимит применяется в store.js при сохранении собранной игроком колоды,
+   а перед боем важно другое: есть ли у игрока столько карт. Это тоже store.js. */
 function validateDeck(cards) {
   if (!Array.isArray(cards)) return 'колода не передана';
   if (cards.length !== RULES.DECK_SIZE) return `в колоде должно быть ${RULES.DECK_SIZE} карт, а не ${cards.length}`;
-  const seen = {};
-  for (const k of cards) {
-    if (!CARDS[k]) return `неизвестная карта: ${k}`;
-    seen[k] = (seen[k] || 0) + 1;
-    if (seen[k] > RULES.MAX_COPIES) return `больше ${RULES.MAX_COPIES} копий карты «${CARDS[k].title}»`;
-  }
+  for (const k of cards) if (!CARDS[k]) return `неизвестная карта: ${k}`;
   return null;
 }
 

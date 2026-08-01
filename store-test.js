@@ -79,6 +79,11 @@ store.addCard(poor, CARD_KEYS[0]);
 check('карта из QR попала в коллекцию', store.getPlayer(poor).collection[CARD_KEYS[0]] === 1);
 check('несуществующую карту не добавить', !!store.addCard(poor, 'нетакой').err);
 
+// стартовая колода нарушает лимит в 3 копии (Щит восемь раз), но выдана игрой
+check('стартовой колодой можно выйти в бой', !!store.deckCards(P, 'starter'),
+  'вернулось: ' + store.deckCards(P, 'starter'));
+check('собрать такую же руками нельзя',
+  !!store.saveDeck(P, { name: 'x', cards: STARTER_DECK.slice() }).err);
 check('стартовую колоду удалить нельзя', !!store.delDeck(P, 'starter').err);
 check('свою колоду удалить можно', !!store.delDeck(P, saved.deck.id).ok);
 check('удалённой колоды нет', store.listDecks(P).decks.length === 1);
