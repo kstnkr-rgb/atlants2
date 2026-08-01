@@ -575,6 +575,8 @@
 <button id="logToggle" title="Лог отладки" aria-label="Лог отладки">≡</button>
 
 <script src="cards.js"></script>
+<!-- правила боя без DOM: тот же модуль подключит сервер (PROJECT.md, раздел 14) -->
+<script src="rules.js"></script>
 <script>
 const STAGE_W = 2597.4, STAGE_H = 1568.8;
 const stage = document.getElementById('stage');
@@ -645,19 +647,24 @@ const TYPE_RU = { attack:'АТАКА', defend:'ЗАЩИТА', magic:'МАГИЯ'
 
 const DB = CARDS;   // 80 настоящих карт набора, база в cards.js
 
-// колода на бой: 20 карт, случайно набранных из набора; у обоих игроков одинаковая
-const DECK_SIZE = 20;
-const MAX_COPIES = 3;   // cardAddingLimit из конфига
-let DECK = [];
-function buildDeck() {
-  return Array.from({ length: DECK_SIZE },
-    () => CARD_KEYS[Math.random() * CARD_KEYS.length | 0]);
-}
+/* ---------- подключение правил ----------
+   Сами правила лежат в rules.js и ничего не знают про DOM. Всё, что показывает
+   бой игроку, собрано здесь и передаётся туда объектом UI. Сервер вместо него
+   передаст RULES.SILENT и посчитает бой мгновенно и молча. */
+const UI = {
+  log: (text, cls) => logMsg(text, cls),
+  popup: (side, text, kind) => popup(side, text, kind),
+  shake: side => hitShake(side),
+  render: () => render(),
+  sleep: ms => sleep(ms),
+  rnd: Math.random,
+  // в PvP второй боец — тоже человек, ему новые карты кладём над рукой, а не в руку
+  toPending: i => i === 0 || NET.mode === 'host',
+};
 
-let uid = 1;
-const shuffle = a => { a = a.slice();
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i],a[j]] = [a[j],a[i]]; }
-  return a; };
+const { DECK_SIZE, MAX_COPIES, MAX_HP, MAX_NRG, HAND_SIZE } = RULES;
+let DECK = [];
+const buildDeck = () => RULES.buildDeck(UI);
 
 // названия параметров заменяются иконками — так описание занимает меньше места
 const IC = {
@@ -732,8 +739,8 @@ function buildCardEl(key, owner, forHand) {
   return el;
 }
 
-/* ---------- состояние боя (правила из движка Атлантов) ---------- */
-const HAND_SIZE = 5, MAX_HP = 50, MAX_NRG = 3;
+/* ---------- состояние боя ----------
+   Правила считает rules.js, здесь только текущее состояние и обвязка. */
 let S;
 
 /* ---------- сетевой бой: точки подключения ----------
@@ -746,16 +753,13 @@ const NET = {
   push() {},       // хост: отправить снимок состояния
   send() {},       // гость: отправить действие
 };
-// в PvP второй боец — тоже человек, значит новые карты ему кладём над рукой, а не в руку
-const isHuman = i => i === 0 || NET.mode === 'host';
+// тонкие обёртки: подставляют текущее состояние и набор UI в общие правила
+const startTurn = i => RULES.startTurn(S, i, UI);
+const drawCards = (p, n, toPending) => RULES.drawCards(p, n, toPending, UI);
+const applyDamage = (t, d) => RULES.applyDamage(t, d);
+const checkWin = () => RULES.checkWin(S);
+const resolveCard = (actorIdx, key) => RULES.resolveCard(S, actorIdx, key, UI);
 
-function mkPlayer(name, deckKeys) {
-  return { name, hp:MAX_HP, block:0, str:0, dex:0, energy:0,
-           trBlock:0, trNrg:0,            // счётчики переноса блока и энергии
-           debuffs:[],                    // активные дебаффы: {stat, amount, wait} — каждый со своим сроком
-           pending:[],                    // новые карты: ждут над рукой, берутся кликом
-           draw:shuffle(deckKeys).map(k => ({ uid:uid++, key:k })), hand:[], disc:[], exh:[] };
-}
 let lastDeck = null;
 // соперник берёт случайную колоду из сохранённых в редакторе
 function foeDeck() {
@@ -766,55 +770,9 @@ function newGame(deckKeys, foeKeys) {
   lastDeck = deckKeys && deckKeys.length ? deckKeys.slice() : null;
   lastFoe  = foeKeys  && foeKeys.length  ? foeKeys.slice()  : null;
   DECK = lastDeck || buildDeck();
-  const foe = lastFoe || foeDeck();
-  S = { p:[mkPlayer('ZEUS', DECK), mkPlayer('APHINA', foe)], cur:0, turn:1, winner:null, busy:false };
   logBox.innerHTML = '';
-  logMsg(`— новый бой, колода ${DECK_SIZE} карт —`, 'turn');
-  startTurn(0);
+  S = RULES.newState(DECK, lastFoe || foeDeck(), UI);
   render();
-}
-function drawCards(p, n, toPending) {
-  for (let i = 0; i < n; i++) {
-    if (!p.draw.length) {
-      if (!p.disc.length) return;
-      p.draw = shuffle(p.disc); p.disc = [];
-    }
-    (toPending ? p.pending : p.hand).push(p.draw.pop());
-  }
-}
-// правила из PlayerBehaviour.RefreshStatsOnNewTurn оригинальной игры
-function startTurn(i) {
-  const p = S.p[i];
-  let blockNote;
-  if (p.trBlock > 0) { p.trBlock--; blockNote = `перенесён ${p.block} (ещё ${p.trBlock} х.)`; }
-  else { blockNote = p.block ? `сгорел ${p.block}` : 'нет'; p.block = 0; }
-  if (p.trNrg > 0) { p.energy += MAX_NRG; p.trNrg--; }  // энергия копится
-  else p.energy = MAX_NRG;
-  // каждый дебафф доживает свой срок независимо от остальных
-  const staying = [];
-  for (const d of p.debuffs) {
-    if (d.wait > 0) { d.wait--; staying.push(d); }
-    else {
-      p[d.stat] += d.amount;
-      logMsg(`  дебафф спал: ${d.stat === 'str' ? 'сила' : 'ловкость'} +${d.amount} → ${p[d.stat]} (${p.name})`, 'turn');
-    }
-  }
-  p.debuffs = staying;
-  const need = HAND_SIZE - p.hand.length;
-  drawCards(p, need);
-  logMsg(`  ${p.name}: блок ${blockNote}, энергия ${p.energy}, добор ${need} → рука ${p.hand.length}, ` +
-         `колода ${p.draw.length}, сброс ${p.disc.length}`);
-}
-function applyDamage(t, d) {      // блок поглощает первым
-  if (t.block > 0) {
-    if (d > t.block) { d -= t.block; t.block = 0; t.hp -= d; return d; }
-    t.block -= d; return 0;
-  }
-  t.hp -= d; return d;
-}
-function checkWin() {
-  if (S.p[1].hp <= 0) S.winner = 0;
-  else if (S.p[0].hp <= 0) S.winner = 1;
 }
 
 /* ---------- эффекты ---------- */
@@ -824,22 +782,12 @@ const ART = [$('artZeus'), $('artAthena')];
 /* ---------- отладочный лог ---------- */
 const logBox = $('logBox');
 const LOG_MAX = 400;   // история для прокрутки
-const FX_RU = {
-  dmg:'урон', hpFoe:'прямой урон', hpSelf:'здоровье', blk:'блок',
-  str:'сила', dex:'ловкость', strFoe:'сила врагу', dexFoe:'ловкость врагу',
-  mulStr:'сила ×', mulDex:'ловкость ×', mulBlk:'блок ×', mulNrg:'энергия ×',
-  nrg:'энергия', draw:'добор', trBlock:'перенос блока', trNrg:'перенос энергии',
-  copyHand:'копия из руки', copySelf:'копия себя', copyDeck:'копия в колоду',
-};
 function logMsg(text, cls) {
   const d = document.createElement('div');
   d.className = 'line' + (cls ? ' ' + cls : '');
   d.textContent = text;
   logBox.prepend(d);                                    // новые строки — внизу панели
   while (logBox.children.length > LOG_MAX) logBox.lastChild.remove();
-}
-function logState(p) {
-  return `${p.name} HP${p.hp} бл${p.block} сил${p.str} лов${p.dex} эн${p.energy}`;
 }
 $('logToggle').addEventListener('click', () => document.body.classList.toggle('nolog'));
 
@@ -906,131 +854,6 @@ function hitShake(side) {
   el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
 }
 
-const sign = v => (v > 0 ? '+' : '') + v;
-
-// изменение силы/ловкости с нижней границей 0
-function bump(who, stat, delta, side, label, byFoe) {
-  const before = who[stat];
-  who[stat] = before + delta;           // нижней границы нет: сила и ловкость уходят в минус
-  const real = who[stat] - before;
-  if (real < 0) {                       // дебафф временный: снятое вернётся владельцу
-    // отдельная запись со своим сроком; чужой доживает до конца хода жертвы
-    who.debuffs.push({ stat, amount: -real, wait: byFoe ? 1 : 0 });
-  }
-  if (real !== 0) popup(side, label + ' ' + sign(real), 'buff');
-}
-
-async function resolveCard(actorIdx, key) {
-  const me = S.p[actorIdx], opp = S.p[1 - actorIdx], c = DB[key];
-  const foe = 1 - actorIdx;
-  const toPend = isHuman(actorIdx);   // человеку новые карты кладём над рукой, боту — сразу в руку
-
-  for (const f of c.fx) {
-    let note = '';
-    switch (f.k) {
-      case 'dmg': {                                  // урон через блок, +сила
-        const total = Math.max(0, f.v + me.str);
-        const dealt = applyDamage(opp, total);
-        note = `урон ${f.v}${me.str ? ` +${me.str} силы = ${total}` : ''}` +
-               ` → блок поглотил ${total - dealt}, по HP ${dealt} (${opp.name} HP ${opp.hp})`;
-        popup(foe, '−' + total, 'dmg'); hitShake(foe);
-        if (dealt === 0) popup(foe, 'БЛОК', 'blk');
-        break;
-      }
-      case 'hpFoe':                                  // прямой урон, минуя блок
-        opp.hp += f.v;
-        note = `прямой урон ${-f.v} мимо блока → ${opp.name} HP ${opp.hp}`;
-        popup(foe, String(f.v), 'dmg'); hitShake(foe);
-        break;
-      case 'hpSelf': {
-        const was = me.hp;
-        me.hp = Math.min(MAX_HP, me.hp + f.v);
-        note = `${f.v >= 0 ? 'лечение' : 'цена карты'} ${sign(f.v)} → HP ${was} → ${me.hp}`;
-        popup(actorIdx, sign(f.v), f.v >= 0 ? 'heal' : 'dmg');
-        break;
-      }
-      case 'blk': {                                  // блок, +ловкость
-        const total = Math.max(0, f.v + me.dex);
-        me.block += total;
-        note = `блок ${f.v}${me.dex ? ` +${me.dex} ловкости = ${total}` : ''} → всего ${me.block}`;
-        popup(actorIdx, '+' + total, 'blk');
-        break;
-      }
-      // сила и ловкость не уходят в минус: ниже нуля дебафф просто не действует,
-      // и во всплывающем числе показывается реально снятая величина
-      case 'str':    bump(me,  'str', f.v, actorIdx, 'СИЛА', false); break;
-      case 'dex':    bump(me,  'dex', f.v, actorIdx, 'ЛОВКОСТЬ', false); break;
-      case 'strFoe': bump(opp, 'str', f.v, foe,      'СИЛА', true); break;
-      case 'dexFoe': bump(opp, 'dex', f.v, foe,      'ЛОВКОСТЬ', true); break;
-
-      // как в оригинале (FighterBehaviour.ChangeStrength/ChangeAgility):
-      // умножение отрицательной характеристики ничего не делает,
-      // иначе дебафф лавинообразно усиливал бы сам себя
-      case 'mulStr':
-        if (me.str > 0) { me.str *= f.v; popup(actorIdx, 'СИЛА ×' + f.v, 'buff'); note = `сила ×${f.v} → ${me.str}`; }
-        else note = `сила ×${f.v} не сработала (сила ${me.str})`;
-        break;
-      case 'mulDex':
-        if (me.dex > 0) { me.dex *= f.v; popup(actorIdx, 'ЛОВКОСТЬ ×' + f.v, 'buff'); note = `ловкость ×${f.v} → ${me.dex}`; }
-        else note = `ловкость ×${f.v} не сработала (ловкость ${me.dex})`;
-        break;
-      case 'mulBlk': me.block *= f.v; popup(actorIdx, 'БЛОК ×' + f.v, 'blk'); note = `блок ×${f.v} → ${me.block}`; break;
-      case 'mulNrg': me.energy *= f.v; popup(actorIdx, 'ЭНЕРГИЯ ×' + f.v, 'buff'); note = `энергия ×${f.v} → ${me.energy}`; break;
-
-      case 'nrg':     me.energy += f.v; popup(actorIdx, 'ЭНЕРГИЯ ' + sign(f.v), 'buff'); note = `энергия ${sign(f.v)} → ${me.energy}`; break;
-      case 'draw': {
-        drawCards(me, f.v, toPend);
-        note = `добор ${f.v} → ${toPend ? 'новые карты ' + me.pending.length : 'рука ' + me.hand.length}` +
-               `, колода ${me.draw.length}, сброс ${me.disc.length}`;
-        break;
-      }
-      // переносы НЕ суммируются: счётчик не складывается, а берётся больший из двух
-      case 'trBlock': {
-        const was = me.trBlock;
-        me.trBlock = Math.max(was, f.v);
-        popup(actorIdx, 'БЛОК ПЕРЕНОС', 'blk');
-        note = `перенос блока на ${f.v} х. → счётчик ${me.trBlock}` +
-               (was && f.v <= was ? ' (не суммируется, уже больше)' : '');
-        break;
-      }
-      case 'trNrg': {
-        const was = me.trNrg;
-        me.trNrg = Math.max(was, f.v);
-        popup(actorIdx, 'ЭНЕРГИЯ ПЕРЕНОС', 'buff');
-        note = `перенос энергии на ${f.v} х. → счётчик ${me.trNrg}` +
-               (was && f.v <= was ? ' (не суммируется, уже больше)' : '');
-        break;
-      }
-
-      // копия карты из руки: в прототипе берётся случайная (выбор игроком не сделан)
-      case 'copyHand':
-        if (me.hand.length) {
-          const src = me.hand[Math.random() * me.hand.length | 0];
-          (toPend ? me.pending : me.hand).push({ uid: uid++, key: src.key });
-          note = `копия «${DB[src.key].title}» → ${toPend ? 'новые карты' : 'рука'}`;
-        } else note = 'копия из руки: рука пуста';
-        break;
-      case 'copySelf':
-        (toPend ? me.pending : me.hand).push({ uid: uid++, key });
-        note = `копия «${c.title}» → ${toPend ? 'новые карты' : 'рука'}`;
-        break;
-      case 'copyDeck':
-        if (me.draw.length) {
-          const src = me.draw[Math.random() * me.draw.length | 0];
-          me.draw.splice(Math.random() * (me.draw.length + 1) | 0, 0, { uid: uid++, key: src.key });
-          note = `копия «${DB[src.key].title}» в колоду → колода ${me.draw.length}`;
-        } else note = 'копия в колоду: колода пуста';
-        break;
-    }
-    logMsg('    ' + (note || `${FX_RU[f.k] || f.k} ${sign(f.v)}`), actorIdx === 0 ? 'you' : 'foe');
-    render();
-    await sleep(340);
-  }
-  logMsg(`    = ${logState(me)} | ${logState(opp)}`);
-  checkWin();
-  render();
-  if (S.winner !== null) logMsg(`ПОБЕДА: ${S.p[S.winner].name}`, 'turn');
-}
 
 /* ---------- отрисовка ---------- */
 const handEls = [];
@@ -1246,9 +1069,7 @@ function inZone(el) {
 async function playBy(who, card) {
   const P = S.p[who], c = DB[card.key];
   if (c.cost > P.energy) { render(); return false; }
-  P.energy -= c.cost;
-  P.hand = P.hand.filter(x => x.uid !== card.uid);
-  (c.exhaust ? P.exh : P.disc).push(card);
+  RULES.spendCard(S, who, card);
   logMsg(`${who === 0 ? 'Вы' : 'Соперник'}: «${c.title}» (${c.cost} эн.)`, who === 0 ? 'you' : 'foe');
   render();
 
@@ -1304,56 +1125,12 @@ async function botTurn() {
   if (S.winner === null) finishTurn(1);
 }
 
-// добить -> защититься под угрозой -> усилиться -> бить
-function chooseCard(options, me, opp) {
-  const fx = c => DB[c.key].fx;
-  const thruBlock = c => fx(c).filter(f => f.k === 'dmg').reduce((s,f) => s + Math.max(0, f.v + me.str), 0);
-  const direct    = c => fx(c).filter(f => f.k === 'hpFoe').reduce((s,f) => s - f.v, 0);
-  const selfHit   = c => fx(c).filter(f => f.k === 'hpSelf' && f.v < 0).reduce((s,f) => s - f.v, 0);
-  const kills     = c => direct(c) + Math.max(0, thruBlock(c) - opp.block) >= opp.hp;
-
-  // множитель по неположительной характеристике бесполезен — не тратить на него ход
-  const useful = c => fx(c).some(f =>
-    f.k === 'mulStr' ? me.str > 0 :
-    f.k === 'mulDex' ? me.dex > 0 :
-    f.k === 'mulBlk' ? me.block > 0 :
-    f.k === 'mulNrg' ? me.energy > 0 : true);
-
-  const safe = options.filter(c => selfHit(c) < me.hp && useful(c));  // и не убить себя ценой карты
-  if (!safe.length) return options.find(c => selfHit(c) < me.hp) || options[0];
-
-  const lethal = safe.filter(kills).sort((a,b) => DB[a.key].cost - DB[b.key].cost);
-  if (lethal.length) return lethal[0];
-
-  const blocks = safe.filter(c => fx(c).some(f => f.k === 'blk'));
-  if (me.hp < MAX_HP * 0.45 && blocks.length && me.block < 10) return blocks[0];
-
-  const util = safe.filter(c => fx(c).some(f => ['draw','nrg','mulNrg','trNrg'].includes(f.k)));
-  if (util.length) return util[0];
-
-  if (S.turn <= 2) {
-    const buffs = safe.filter(c => fx(c).some(f => ['str','dex'].includes(f.k) && f.v > 0));
-    if (buffs.length) return buffs[0];
-  }
-  const heals = safe.filter(c => fx(c).some(f => f.k === 'hpSelf' && f.v > 0));
-  if (me.hp < MAX_HP * 0.6 && heals.length) return heals[0];
-
-  const atk = safe.filter(c => thruBlock(c) + direct(c) > 0)
-                  .sort((a,b) => (thruBlock(b) + direct(b)) - (thruBlock(a) + direct(a)));
-  if (atk.length) return atk[0];
-
-  return blocks.length ? blocks[0] : safe[0];
-}
+// выбор карты ботом живёт в rules.js вместе с остальными правилами
+const chooseCard = (options, me, opp) => RULES.chooseCard(S, options, me, opp);
 
 /* ---------- смена хода ---------- */
 function finishTurn(who) {
-  const p = S.p[who];
-  p.disc.push(...p.hand, ...p.pending);   // рука и незабранные новые карты — в сброс
-  p.hand = []; p.pending = [];
-  S.cur = 1 - who;
-  if (S.cur === 0) S.turn++;
-  logMsg(`— ход ${S.turn}: ${S.p[S.cur].name} —`, 'turn');
-  startTurn(S.cur);
+  RULES.endTurn(S, who, UI);
   render();
   // в PvP за второго ходит живой игрок — его действия придут по сети
   if (S.cur === 1 && S.winner === null && NET.mode === 'local') {

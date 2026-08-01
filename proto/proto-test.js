@@ -5,9 +5,11 @@ const vm = require('vm');
 const path = require('path');
 const BASE = __dirname + path.sep;   // тест лежит рядом с прототипом, путь к машине не привязан
 const html = fs.readFileSync(BASE + 'index.html', 'utf8');
-const cardsJs = fs.readFileSync(BASE + 'cards.js', 'utf8').replace(/if \(typeof module[\s\S]*$/, '');
+const strip = f => fs.readFileSync(BASE + f, 'utf8').replace(/if \(typeof module[\s\S]*$/, '');
+const cardsJs = strip('cards.js');
+const rulesJs = strip('rules.js');          // правила боя вынесены из разметки
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const script = cardsJs + '\n' + inline;
+const script = cardsJs + '\n' + rulesJs + '\n' + inline;
 
 function el() {
   const e = {
