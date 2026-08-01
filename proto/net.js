@@ -1,40 +1,37 @@
 'use strict';
 /*
-  Сетевой слой боя вдвоём. Грузится ПОСЛЕ основного скрипта: пользуется его
-  движком и экранами (S, render, newGame, finishTurn, playBy, deckAt, ...).
+  Клиент PvP. Грузится ПОСЛЕ основного скрипта: пользуется его экранами и отрисовкой.
 
-  Разделение сторон:
-    хост  — считает бой своим движком, шлёт релею снимок состояния;
-    гость — движок не считает вообще, рисует присланный снимок и шлёт действия.
+  Здесь НЕ считается бой. Совсем. Клиент делает ровно две вещи:
+    берёт у сервера вид состояния и рисует его;
+    отправляет намерения — «сыграть карту 47», «конец хода», «взять карту».
 
-  Ключевой приём: хост отдаёт снимок УЖЕ перевёрнутым — свои и чужие местами.
-  Поэтому у гостя весь существующий рендер (S.p[0] — «я») работает без правок.
+  Всё остальное — на сервере (matches.js): он проверяет каждое действие, владеет
+  случайностью и прячет чужую руку. Подробности — PROJECT.md, раздел 14.
 
-  Хост доверенный: он может подделать состояние. Для теста «поиграть с другом»
-  этого достаточно, правильный серверный арбитр — отдельная задача (PROJECT.md, п. 9).
+  Вид от сервера приходит уже от лица игрока: своё в `me`, чужое в `foe`,
+  ход как 'me'/'foe'. Поэтому вся существующая отрисовка (S.p[0] — «я»)
+  работает без правок, надо только разложить вид в привычную форму.
 */
 (function () {
 
-/* ---------- адрес релея ---------- */
-// обычно сервер тот же, что отдал страницу; ?server=https://... нужен,
-// если страницу открыли с githack, а релей живёт отдельно
+// сервер тот же, что отдал страницу; ?server=https://... — если страница с githack
 const qs = new URLSearchParams(location.search);
 const API = (qs.get('server') || (/^https?:$/.test(location.protocol) ? location.origin : ''))
   .replace(/\/+$/, '');
 
-const box = $('pvpBox'), statusEl = $('pvpStatus');
+const statusEl = $('pvpStatus'), findBtn = $('pvpFind');
 const say = (text, bad) => {
   statusEl.textContent = text;
   statusEl.classList.toggle('bad', !!bad);
 };
 
 if (!API) {
-  box.classList.add('off');
+  findBtn.disabled = true;
   say('Бой вдвоём работает только со страницы, отданной сервером игры (node relay.js)');
   return;
 }
 
-/* ---------- запросы ---------- */
 async function call(name, body) {
   const r = await fetch(`${API}/api/${name}`, {
     method: 'POST',
@@ -43,217 +40,148 @@ async function call(name, body) {
   });
   return r.json();
 }
-async function pollOnce(params) {
-  const r = await fetch(`${API}/api/poll?` + new URLSearchParams(params));
-  return r.json();
+
+const POLL_MS = 500;
+let matchId = null, token = null, timer = null, inFlight = false;
+let seq = 0;           // номер намерения: сервер отбрасывает повторы и устаревшие
+let logFrom = 0;       // сколько строк лога уже показано
+let lastPlayN = 0;     // номер последней показанной карты в центре
+let started = false;
+let counted = false;   // итог боя засчитан в профиль один раз
+
+// у игрока может не быть выбранной колоды — берём стартовую
+function myDeck() {
+  const d = deckAt(chosenMe);
+  if (d && d.length === DECK_SIZE) return d.slice();
+  const starter = decks.find(x => x.starter);
+  if (starter && starter.cards.length === DECK_SIZE) return starter.cards.slice();
+  return buildDeck();
 }
 
-/* ---------- состояние связи ---------- */
-let code = null, tok = null, myDeck = null;
-let timer = null, inFlight = false, started = false;
-let ack = 0;        // хост: номер последнего разобранного действия гостя
-let rev = 0;        // гость: версия последнего показанного снимка
+// у прототипа нет учётной записи — до интеграции с «Клубом Друзей»
+// хватает случайного номера, лежащего в этом же браузере
+function myId() {
+  let id = lsGet('atlanteans_player');
+  if (!id) { id = 'p' + Math.random().toString(36).slice(2, 10); lsSet('atlanteans_player', id); }
+  return id;
+}
 
-const POLL_MS = 800;
-const OFFLINE_MS = 10000;   // столько без опроса — считаем, что соперник отвалился
-
-function stop(text) {
+function stop(text, bad) {
   clearInterval(timer);
   timer = null;
+  matchId = null; token = null; started = false;
   NET.mode = 'local';
-  if (text) say(text, true);
+  if (text) say(text, bad);
 }
 
-function beginBattle() {
-  started = true;
-  showScreen(null);
-  $('roomCode').textContent = 'КОД ' + code;
-}
-
-// «соперник оффлайн» в шапке — иначе непонятно, почему бой замер
-function showPresence(ago) {
-  if (!started || ago === null || ago === undefined) return;
-  $('roomCode').textContent = ago > OFFLINE_MS ? 'СОПЕРНИК ОФФЛАЙН' : 'КОД ' + code;
-}
-
-/* ---------- сторона хоста ---------- */
-
-// в снимке для гостя чужая рука и стопки обезличены: видно только количество карт
-function blind(p) {
-  return Object.assign({}, p, {
-    hand: p.hand.map(() => ({ uid: 0, key: null })),
-    pending: [], draw: [], disc: [], exh: [],
-  });
-}
-// снимок глазами гостя: он всегда p[0], поэтому индексы меняются местами
-function flip() {
+/* ---------- превращение вида сервера в привычное состояние ----------
+   Отрисовка ждёт S.p[0] — «я», S.p[1] — соперник, и числа в S.cur/S.turn.
+   Стопки соперника приходят числами, а рисовалка берёт .length —
+   поэтому разворачиваем их в пустые массивы нужной длины. */
+function toState(v) {
+  const foe = Object.assign({}, v.foe);
+  foe.draw = new Array(v.foe.draw).fill(0);
+  foe.disc = new Array(v.foe.disc).fill(0);
+  foe.exh  = new Array(v.foe.exh).fill(0);
   return {
-    p: [S.p[1], blind(S.p[0])],
-    cur: 1 - S.cur,
-    turn: S.turn,
-    winner: S.winner === null ? null : 1 - S.winner,
-    busy: S.busy,
-    center: NET.center ? { key: NET.center.key, side: 1 - NET.center.side } : null,
+    p: [v.me, foe],
+    cur: v.cur === 'me' ? 0 : 1,
+    turn: v.turn,
+    winner: v.winner === null ? null : (v.winner === 'me' ? 0 : 1),
+    busy: v.busy,
+    counted: true,        // счёт побед ведёт сервер, локально не накручиваем
   };
 }
 
-// render() зовётся часто (в том числе на каждый эффект карты), поэтому
-// снимок не шлём сразу, а помечаем состояние грязным и отправляем по таймеру
-let dirty = false, pushing = false;
-function hostPush() { dirty = true; }
-async function pushTick() {
-  if (NET.mode !== 'host' || !started || !dirty || pushing) return;
-  dirty = false;
-  pushing = true;
-  try { await call('push', { code, token: tok, snap: flip() }); }
-  catch (e) { dirty = true; }          // не дошло — попробуем в следующий раз
-  finally { pushing = false; }
+function showLog(lines) {
+  for (const l of lines) logMsg(l.text, l.cls);
 }
 
-// действия гостя разбираем строго по одному: розыгрыш карты асинхронный
-let queue = Promise.resolve();
-async function applyRemote(act) {
-  if (!act) return;
-  if (act.t === 'again') {
-    $('over').classList.remove('show');
-    newGame(lastDeck, lastFoe);
+// карта, сыгранная любой стороной, показывается в центре
+async function showCenter(lp) {
+  if (!lp || lp.n === lastPlayN) return;
+  lastPlayN = lp.n;
+  const owner = lp.mine ? S.p[0] : S.p[1];
+  await showPlayed(lp.key, owner || NEUTRAL);
+  await hidePlayed();
+}
+
+function apply(v) {
+  if (!started) {
+    started = true;
+    showScreen(null);
+  }
+  S = toState(v);
+  if (v.log && v.log.length) { showLog(v.log); logFrom = v.logNext; }
+  render();
+  // таймер хода вместо подписи «прототип дуэли»
+  $('roomCode').textContent = v.over ? '' : `ХОД: ${v.left} с`;
+  if (v.over) {
+    // счёт в профиле ведётся здесь: в S стоит counted, чтобы render() не считал сам
+    if (!counted) { counted = true; bumpStat(v.over.win ? 'wins' : 'losses'); }
+    $('overText').textContent = v.over.win ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
+    $('over').classList.add('show');
+  }
+  showCenter(v.lastPlay);
+}
+
+/* ---------- отправка намерений ----------
+   Ответа не ждём: следующий опрос всё равно принесёт новое состояние.
+   Локально только запираем руку, чтобы не отправить действие дважды. */
+function send(act) {
+  if (!matchId) return;
+  S.busy = true;
+  render();
+  call('match/act', { matchId, token, seq: ++seq, act }).then(r => {
+    if (r && r.err) say(r.err, true);
+  }).catch(() => {});
+}
+
+async function tick() {
+  if (!matchId) {                       // ещё стоим в очереди
+    const r = await call('match/queue', { playerId: myId(), name: 'Игрок', deck: myDeck() });
+    if (r.err) return stop(r.err, true);
+    if (r.matchId) {
+      matchId = r.matchId; token = r.token;
+      say('соперник найден');
+    }
     return;
   }
-  if (S.winner !== null || S.busy) return;
-
-  if (act.t === 'play') {
-    if (S.cur !== 1) return;
-    const card = S.p[1].hand.find(x => x.uid === act.uid);
-    if (!card) return;
-    S.busy = true;
-    await playBy(1, card);
-    S.busy = false;
-    render();
-  } else if (act.t === 'take') {
-    const P = S.p[1];
-    const card = P.pending.find(x => x.uid === act.uid);
-    if (!card) return;
-    P.pending = P.pending.filter(x => x.uid !== act.uid);
-    P.hand.push(card);
-    logMsg(`  соперник взял новую карту «${DB[card.key].title}»`, 'foe');
-    render();
-  } else if (act.t === 'end') {
-    if (S.cur !== 1) return;
-    finishTurn(1);
-  }
+  // пока карту тянут пальцем, состояние не подменяем — иначе жест оборвётся
+  if (document.querySelector('.card.dragging')) return;
+  const v = await call('match/state', { matchId, token, logFrom });
+  if (v.err) return stop(v.err, true);
+  apply(v);
 }
 
-async function hostTick() {
-  const r = await pollOnce({ code, token: tok, ack });
-  if (r.err) return stop(r.err);
-
-  if (!started && r.foeDeck) {
-    beginBattle();
-    newGame(myDeck, r.foeDeck);     // хост считает бой: своя колода против колоды гостя
-  }
-  if (r.acts && r.acts.length) {
-    ack = r.acts[r.acts.length - 1].n;
-    for (const a of r.acts) queue = queue.then(() => applyRemote(a.act)).catch(() => {});
-  }
-  showPresence(r.oppAgo);
-}
-
-/* ---------- сторона гостя ---------- */
-
-// карта в центре: гость не считает бой, поэтому показывает её по снимку
-let centerKey = null;
-function showCenter(c) {
-  const key = c ? c.key : null;
-  if (key === centerKey) return;
-  centerKey = key;
-  playedBox.innerHTML = '';
-  if (key) {
-    playedBox.appendChild(buildCardEl(key, S.p[c.side] || NEUTRAL, false));
-    playedBox.classList.add('show');
-  } else {
-    playedBox.classList.remove('show');
-  }
-}
-
-function applySnap(snap) {
-  if (!started) beginBattle();
-  S = snap;
-  if (snap.winner === null) $('over').classList.remove('show');   // после реванша убрать экран итога
-  render();
-  showCenter(snap.center);
-}
-
-async function guestTick() {
-  const r = await pollOnce({ code, token: tok, rev });
-  if (r.err) return stop(r.err);
-  // пока карту тянут пальцем, рендер не трогаем — иначе жест обрывается.
-  // rev не двигаем, поэтому тот же снимок придёт снова
-  if (r.snap && !document.querySelector('.card.dragging')) {
-    rev = r.rev;
-    applySnap(r.snap);
-  }
-  showPresence(r.oppAgo);
-}
-
-function guestSend(act) {
-  S.busy = true;      // до ответа хоста рука заблокирована, чтобы не сыграть дважды
-  render();
-  call('act', { code, token: tok, act }).catch(() => {});
-}
-
-/* ---------- общий цикл опроса ---------- */
 function loop() {
   timer = setInterval(async () => {
-    if (inFlight) return;             // связь медленнее опроса — пропускаем такт
+    if (inFlight) return;
     inFlight = true;
-    try {
-      await (NET.mode === 'host' ? hostTick() : guestTick());
-      if (NET.mode === 'host') await pushTick();
-    } catch (e) {
-      say('нет связи с сервером', true);
-    } finally {
-      inFlight = false;
-    }
+    try { await tick(); }
+    catch (e) { say('нет связи с сервером', true); }
+    finally { inFlight = false; }
   }, POLL_MS);
 }
 
-/* ---------- кнопки лобби ---------- */
-const chosenDeck = () => (deckAt(chosenMe) || buildDeck()).slice();   // «случайная» тоже разворачивается в состав
-
-$('pvpCreate').onclick = async () => {
+/* ---------- кнопки ---------- */
+findBtn.onclick = () => {
   if (timer) return;
-  myDeck = chosenDeck();
-  say('создаём бой…');
-  try {
-    const r = await call('create', { deck: myDeck });
-    if (r.err) return say(r.err, true);
-    code = r.code; tok = r.token;
-    NET.mode = 'host';
-    NET.push = hostPush;
-    say(`Код боя: ${r.code} — назовите его сопернику. Ждём…`);
-    loop();
-  } catch (e) {
-    say('сервер не отвечает', true);
-  }
+  NET.mode = 'net';
+  NET.send = send;
+  seq = 0; logFrom = 0; lastPlayN = 0; counted = false;
+  say('ищем соперника…');
+  loop();
 };
 
-$('pvpJoin').onclick = async () => {
-  if (timer) return;
-  const want = $('pvpCode').value.trim();
-  if (!/^\d{4}$/.test(want)) return say('код — четыре цифры', true);
-  myDeck = chosenDeck();
-  say('входим…');
-  try {
-    const r = await call('join', { code: want, deck: myDeck });
-    if (r.err) return say(r.err, true);
-    code = want; tok = r.token;
-    NET.mode = 'guest';
-    NET.send = guestSend;
-    say('вошли, ждём хозяина боя…');
-    loop();
-  } catch (e) {
-    say('сервер не отвечает', true);
-  }
+// ушли с экрана PvP, не дождавшись соперника — опрос прекращаем
+const backBtn = document.querySelector('#pvpScreen [data-back]');
+if (backBtn) backBtn.addEventListener('click', () => { if (!matchId) stop(''); });
+
+// выход из боя: сдаёмся, чтобы соперник не ждал впустую
+NET.leave = () => {
+  if (matchId) send({ t: 'give' });
+  stop('');
 };
 
 })();

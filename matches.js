@@ -141,6 +141,8 @@ function viewFor(m, playerId, logFrom) {
     ...RULES.viewFor(m.S, who),
     // сколько секунд осталось на текущий ход
     left: m.over ? 0 : Math.max(0, Math.round((m.deadline - now()) / 1000)),
+    // что последним сыграли; n растёт, по нему клиент понимает, что карта новая
+    lastPlay: m.lastPlay ? { key: m.lastPlay.key, mine: m.lastPlay.who === who, n: m.lastPlay.n } : null,
     over: m.over ? { win: m.over.winner === who, reason: m.over.reason } : null,
     // строки лога, которых у клиента ещё нет
     log: m.log.filter(l => l.n >= from),
@@ -185,6 +187,8 @@ async function apply(m, playerId, seq, act) {
     } finally {
       m.S.busy = false;
     }
+    // последняя сыгранная карта: по ней соперник покажет её в центре экрана
+    m.lastPlay = { who, key: card.key, n: (m.lastPlay ? m.lastPlay.n : 0) + 1 };
     m.moves.push({ who, t: 'play', key: card.key, at: now() });
     m.missed[who] = 0;
     m.rev++;

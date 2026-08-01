@@ -108,6 +108,9 @@ const api = {
 
    ВРЕМЕННО: бой создаёт кто угодно и колоды приходят от клиента. Так и задумано
    на этом шаге — лобби (шаг 4) и колоды на сервере (шаг 5) ещё не сделаны. */
+const waiting = new Map();   // кто стоит в очереди: playerId → {id, name, deck, at}
+const pairs = new Map();     // кому уже нашли бой: playerId → {matchId, token}
+
 const matchApi = {
   // создать бой; в ответ два токена — по одному каждой стороне
   'match/new'(body) {
@@ -120,6 +123,36 @@ const matchApi = {
       body.deckA, body.deckB, body.seed);
     if (err) return { err };
     return { matchId: match.id, tokens: { a: match.tokens[0], b: match.tokens[1] } };
+  },
+
+  /* ВРЕМЕННО, до лобби (шаг 4): очередь на соперника.
+     Первый вставший ждёт, второй запускает бой. Никакого подбора здесь нет
+     и не задумано — лобби со списком игроков заменит это целиком. */
+  'match/queue'(body) {
+    const id = String(body.playerId || '').trim();
+    if (!id) return { err: 'нужен игрок' };
+    const bad = M.validateDeck(body.deck);
+    if (bad) return { err: bad };
+    const me = { id, name: String(body.name || id), deck: body.deck, at: now() };
+
+    // уже дождался — отдаём бой и убираем метку
+    const ready = pairs.get(id);
+    if (ready) { pairs.delete(id); return ready; }
+
+    // отсеиваем протухших и себя же
+    for (const [k, v] of waiting) if (now() - v.at > 60000 || k === id) waiting.delete(k);
+
+    const other = waiting.values().next().value;
+    if (!other) { waiting.set(id, me); return { waiting: true }; }
+    waiting.delete(other.id);
+
+    const { match, err } = M.createMatch(
+      { id: other.id, name: other.name }, { id: me.id, name: me.name },
+      other.deck, me.deck);
+    if (err) return { err };
+    // тому, кто ждал, результат заберут следующим опросом
+    pairs.set(other.id, { matchId: match.id, token: match.tokens[0] });
+    return { matchId: match.id, token: match.tokens[1] };
   },
 
   // текущее состояние глазами игрока: туман войны уже наложен
