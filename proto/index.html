@@ -247,19 +247,76 @@
   .screen.show { display:flex; }
   .scr-head { display:flex; align-items:center; gap:26px; flex:0 0 auto; margin-bottom:22px;
     font-size:44px; font-weight:700; color:#D9A847; letter-spacing:2px; }
-  .btn { border:none; border-radius:16px; background:#D9A847; color:#231803;
-    font-size:30px; font-weight:700; padding:16px 34px; cursor:pointer; }
-  .btn.ghost { background:rgba(255,255,255,.12); color:#e8eef4; }
+  /* ---------- плашки в стиле старой игры ----------
+     Снято с её главного меню (лист «старые атланты», узел 93:4514).
+     Обычное состояние: тёмный градиент слева направо, рамка 1 px белым
+     градиентом — ярче по краям, гаснет в середине, — и засечки по углам.
+     Углы прямые, как в оригинале.
+     Выделенное: бордовый градиент с кремовой рамкой и свечением. */
+  .plate { position:relative; cursor:pointer; color:#FFE8AC;
+    background:linear-gradient(90deg, rgba(48,48,48,0), rgba(48,48,48,.2));
+    border:2px solid transparent;
+    border-image:linear-gradient(90deg, rgba(255,255,255,.45),
+      rgba(255,255,255,.08) 50%, rgba(255,255,255,.45)) 1; }
+  /* засечки: слева сверху и справа снизу, как в оригинале */
+  .plate::before, .plate::after { content:""; position:absolute; width:16px; height:16px;
+    pointer-events:none; border:3px solid rgba(255,255,255,.45); }
+  .plate::before { left:7px; top:7px; border-right:none; border-bottom:none; }
+  .plate::after { right:7px; bottom:7px; border-left:none; border-top:none; }
+  .plate.hot { color:#FFF4D7;
+    background:linear-gradient(90deg, rgba(81,42,30,.85), rgb(115,37,31));
+    border-image:linear-gradient(90deg, #FFF4D7, #FFF4D7) 1;
+    box-shadow:0 0 22px rgba(255,232,172,.45); }
+  .plate.hot::before, .plate.hot::after { border-color:#D9A847; }
+  .plate:disabled { filter:grayscale(.6) brightness(.6); cursor:default; }
+
+  /* кнопки — те же плашки: обычная тёмная, основное действие бордовое */
+  .btn { font-size:30px; font-weight:700; padding:16px 34px; cursor:pointer;
+    position:relative; color:#FFF4D7;
+    background:linear-gradient(90deg, rgba(81,42,30,.85), rgb(115,37,31));
+    border:2px solid transparent;
+    border-image:linear-gradient(90deg, #FFF4D7, #FFF4D7) 1;
+    box-shadow:0 0 22px rgba(255,232,172,.45); }
+  .btn::before, .btn::after { content:""; position:absolute; width:16px; height:16px;
+    pointer-events:none; border:3px solid #D9A847; }
+  .btn::before { left:7px; top:7px; border-right:none; border-bottom:none; }
+  .btn::after { right:7px; bottom:7px; border-left:none; border-top:none; }
+  .btn.ghost { color:#FFE8AC; box-shadow:none;
+    background:linear-gradient(90deg, rgba(48,48,48,0), rgba(48,48,48,.2));
+    border-image:linear-gradient(90deg, rgba(255,255,255,.45),
+      rgba(255,255,255,.08) 50%, rgba(255,255,255,.45)) 1; }
+  .btn.ghost::before, .btn.ghost::after { border-color:rgba(255,255,255,.45); }
   .btn:disabled { filter:grayscale(.7) brightness(.6); cursor:default; }
+
+  /* кнопка «назад»: тот же компонент квадратом — как профиль и настройки
+     в нижнем углу старого меню. Полос сверху на экранах меню больше нет. */
+  .back { position:absolute; left:52px; top:36px; width:104px; height:104px; padding:0;
+    z-index:5; font-size:52px; line-height:1; display:flex;
+    align-items:center; justify-content:center; }
+  .back:active { background:linear-gradient(90deg, rgba(81,42,30,.85), rgb(115,37,31)); }
   .scr-head .btn { padding:12px 26px; font-size:26px; }
   .spacer { margin-left:auto; }
 
   .ss-list { flex:1 1 auto; overflow-y:auto; touch-action:pan-y;
     overscroll-behavior:contain; display:flex; flex-direction:column; gap:14px;
     max-width:1200px; width:100%; margin:0 auto; }
-  .ss-item { display:flex; align-items:center; gap:20px; padding:20px 26px; border-radius:14px;
-    background:rgba(255,255,255,.07); border:3px solid transparent; cursor:pointer; }
-  .ss-item.sel { border-color:#D9A847; background:rgba(217,168,71,.16); }
+  /* строка списка — та же плашка старой игры */
+  .ss-item { position:relative; display:flex; align-items:center; gap:20px; padding:20px 34px;
+    cursor:pointer; color:#FFE8AC;
+    background:linear-gradient(90deg, rgba(48,48,48,0), rgba(48,48,48,.2));
+    border:2px solid transparent;
+    border-image:linear-gradient(90deg, rgba(255,255,255,.45),
+      rgba(255,255,255,.08) 50%, rgba(255,255,255,.45)) 1; }
+  .ss-item::before, .ss-item::after { content:""; position:absolute; width:16px; height:16px;
+    pointer-events:none; border:3px solid rgba(255,255,255,.45); }
+  .ss-item::before { left:7px; top:7px; border-right:none; border-bottom:none; }
+  .ss-item::after { right:7px; bottom:7px; border-left:none; border-top:none; }
+  .ss-item.sel, .ss-item.self {
+    background:linear-gradient(90deg, rgba(81,42,30,.85), rgb(115,37,31));
+    border-image:linear-gradient(90deg, #FFF4D7, #FFF4D7) 1;
+    box-shadow:0 0 22px rgba(255,232,172,.45); }
+  .ss-item.sel::before, .ss-item.sel::after,
+  .ss-item.self::before, .ss-item.self::after { border-color:#D9A847; }
   .ss-item .ss-name { font-size:32px; font-weight:600; color:#fff; }
   .ss-item .ss-info { font-size:24px; color:#a7b4c0; }
   .ss-item .pick-cell { margin-left:auto; display:flex; gap:10px; }
@@ -270,16 +327,13 @@
   .ss-actions { flex:0 0 auto; display:flex; gap:20px; justify-content:center;
     margin-top:34px; }
 
-  /* ---------- экраны схемы: общая шапка и фон ----------
-     Оформление снято с макета: бордовая полоса, золотая линия, стрелка «назад». */
+  /* ---------- экраны меню: фон ----------
+     Полосы сверху нет ни на одном экране: осталась только кнопка «назад». */
   .screen { background:#0a0d10 url("img/menu_bg.png") center/cover no-repeat; }
   .screen::before { content:""; position:absolute; inset:0; background:rgba(10,6,7,.72); }
   .screen > * { position:relative; }
-  .scr-top { flex:0 0 auto; height:92px; margin:-44px -60px 26px; background:rgba(36,14,17,.96);
-    border-bottom:4px solid #D9A847; display:flex; align-items:center; padding:0 34px; }
-  .back { border:none; background:none; color:#FFE8AC; font-size:46px; line-height:1;
-    cursor:pointer; padding:6px 16px; }
-  .back:active { color:#D9A847; }
+  /* на экранах с кнопкой «назад» контент начинается ниже неё */
+  .screen:has(> .back) { padding-top:176px; }
   .ss-sub { flex:0 0 auto; color:#D9A847; font-size:30px; font-weight:700; letter-spacing:3px;
     max-width:1200px; width:100%; margin:0 auto 16px; }
   .ss-list .empty { padding:60px; text-align:center; font-size:30px; color:#8b7f6d; }
@@ -299,9 +353,8 @@
   .lb-state.busy { color:#c08c80; }
   .pvp-hint { flex:0 0 auto; text-align:center; font-size:22px; color:#a09383; margin-top:12px; }
   /* «изменить» на экране колод — квадратная кнопка с карандашом, как в макете */
-  .ed-pencil { width:56px; height:56px; padding:0; font-size:26px; line-height:1;
-    border-radius:10px; background:rgba(45,30,28,.9); color:#D9A847;
-    box-shadow:inset 0 0 0 2px #D9A847; border:none; cursor:pointer; }
+  .ed-pencil { width:64px; height:64px; padding:0; font-size:28px; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; }
 
   /* окно запроса на бой и ожидания — оформление как у окон старой игры */
   .pmodal { position:absolute; inset:0; z-index:1400; background:rgba(6,4,4,.72);
@@ -321,17 +374,19 @@
   .screen.menu::before { content:none; }
   .menu-bg     { left:-106px; top:0;    width:2810px; height:1580px; }
   .menu-zeus   { left:-424px; top:-125px; width:1842px; height:2692px; }
-  .menu-athena { left:1372px; top:29px;   width:1690px; height:2470px; }
+  /* в макете у слоя отражение по горизонтали, как на боевом экране */
+  .menu-athena { left:1372px; top:29px;   width:1690px; height:2470px;
+    transform:scaleX(-1); }
   .menu-veil   { position:absolute; inset:0; background:rgba(10,6,7,.38); }
-  #stage .menu-logo { left:853px; top:-41px; width:934px; height:auto; }
+  /* габарит группы в макете начинается на 41 px выше, но эти пиксели пустые;
+     картинка выгружена по видимой части, поэтому ставим её от нуля */
+  #stage .menu-logo { left:853px; top:0; width:934px; height:auto; }
   .menu-btns { position:absolute; left:820px; top:966px; width:1000px;
     display:flex; flex-direction:column; gap:30px; }
   /* три пункта меню одинаковые — по отдельной просьбе заказчика.
      В макете у «КОЛОДА» осталась подсветка от первой версии, здесь её нет. */
-  .menu-btn { height:150px; padding:0; border-radius:8px; font-size:54px; font-weight:600;
-    letter-spacing:2px; background:rgba(28,16,18,.8); color:#FFE8AC;
-    box-shadow:inset 0 0 0 3px #D9A847; }
-  .menu-btn:active { background:rgba(74,23,27,.95); }
+  .menu-btn { height:150px; padding:0; font-size:54px; font-weight:600; letter-spacing:2px; }
+  .menu-btn:active { background:linear-gradient(90deg, rgba(81,42,30,.85), rgb(115,37,31)); }
   .avatar-btn { position:absolute; left:2283px; top:40px; width:230px; height:230px; padding:0;
     border:none; background:none; cursor:pointer; }
   #stage .avatar-btn img { position:static; width:100%; height:100%; display:block; }
@@ -508,16 +563,16 @@
   <div class="menu-veil"></div>
   <img class="menu-logo" src="img/logo.png" alt="Атланты: Дуэли богов">
   <div class="menu-btns">
-    <button class="btn menu-btn" id="mmDecks">КОЛОДА</button>
-    <button class="btn menu-btn" id="mmPvp">PvP</button>
-    <button class="btn menu-btn" id="mmPve">PvE</button>
+    <button class="btn ghost menu-btn" id="mmDecks">КОЛОДА</button>
+    <button class="btn ghost menu-btn" id="mmPvp">PvP</button>
+    <button class="btn ghost menu-btn" id="mmPve">PvE</button>
   </div>
   <button class="avatar-btn" id="mmProfile" title="Профиль"><img src="img/icon_profile.png" alt=""></button>
 </div>
 
 <!-- PvE: выбор колоды перед боем с ботом -->
 <div class="screen" id="pveScreen">
-  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <button class="btn ghost back" data-back="menuScreen">←</button>
   <div class="ss-sub">КОЛОДЫ:</div>
   <div class="ss-list" id="ssList"></div>
   <div class="ss-actions"><button class="btn" id="ssPlay">ИГРАТЬ</button></div>
@@ -525,7 +580,7 @@
 
 <!-- PvP: лобби. Список ведёт сервер, вызов идёт по id игрока, кодов комнат нет -->
 <div class="screen" id="pvpScreen">
-  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <button class="btn ghost back" data-back="menuScreen">←</button>
   <div class="ss-sub">ИГРОКИ ОНЛАЙН:</div>
   <div class="ss-list" id="pvpList"><div class="empty">Пусто</div></div>
   <div class="pvp-hint">выберите соперника из списка — ему придёт запрос на бой</div>
@@ -534,7 +589,7 @@
 
 <!-- PvP: выбор колоды после согласия на бой -->
 <div class="screen" id="pvpDeckScreen">
-  <div class="scr-top"><button class="back" data-back="pvpScreen">←</button></div>
+  <button class="btn ghost back" data-back="pvpScreen">←</button>
   <div class="ss-sub">КОЛОДЫ:</div>
   <div class="ss-list" id="pvpDeckList"></div>
   <div class="ss-actions"><button class="btn" id="pvpPlay">ИГРАТЬ</button></div>
@@ -552,7 +607,7 @@
 
 <!-- экран колод: список, редактирование, сканирование -->
 <div class="screen" id="decksScreen">
-  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <button class="btn ghost back" data-back="menuScreen">←</button>
   <div class="ss-sub">КОЛОДЫ:</div>
   <div class="ss-list" id="dkList"></div>
   <div class="ss-actions">
@@ -563,7 +618,7 @@
 
 <!-- сканирование карты -->
 <div class="screen scan" id="scanScreen">
-  <div class="scr-top"><button class="back" data-back="decksScreen">←</button></div>
+  <button class="btn ghost back" data-back="decksScreen">←</button>
   <div class="scan-hint">НАВЕДИТЕ КАМЕРУ НА QR-КОД КАРТЫ</div>
   <div class="viewfinder"><i></i><i></i><i></i><i></i></div>
   <!-- Ручного ввода кода нет: карта попадает в колоду только сканированием.
@@ -580,7 +635,7 @@
 
 <!-- профиль игрока -->
 <div class="screen" id="profileScreen">
-  <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
+  <button class="btn ghost back" data-back="menuScreen">←</button>
   <div class="pf">
     <img class="pf-av" src="img/avatar.png" alt="">
     <div class="pf-hint">нажмите, чтобы сменить аватар</div>
@@ -1332,8 +1387,8 @@ function renderDecks() {
       <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
       <span class="ss-info">${d.cards.length} карт</span>
       <span class="pick-cell">
-        <button class="ed-pencil" data-edit="${i}" title="изменить">✎</button>
-        ${d.starter ? '' : `<button class="ed-pencil" data-del="${i}" title="удалить">✕</button>`}
+        <button class="btn ghost ed-pencil" data-edit="${i}" title="изменить">✎</button>
+        ${d.starter ? '' : `<button class="btn ghost ed-pencil" data-del="${i}" title="удалить">✕</button>`}
       </span>
     </div>`).join('');
 }
