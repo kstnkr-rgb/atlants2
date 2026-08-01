@@ -286,6 +286,20 @@
   .pvp-status { flex:0 0 auto; text-align:center; font-size:26px; color:#D9A847;
     min-height:34px; margin-top:14px; }
   .pvp-status.bad { color:#e07a63; }
+  /* строка игрока в лобби: своя помечена и без кнопки вызова */
+  .ss-item.self { border-color:rgba(217,168,71,.5); background:rgba(217,168,71,.10); }
+  .ss-item .ss-you { font-size:22px; color:#D9A847; letter-spacing:2px; }
+  .ss-item .ss-busy { font-size:22px; color:#8b7f6d; }
+
+  /* окно запроса на бой и ожидания — оформление как у окон старой игры */
+  .pmodal { position:absolute; inset:0; z-index:1400; background:rgba(6,4,4,.72);
+    display:none; align-items:center; justify-content:center; }
+  .pmodal.show { display:flex; }
+  .pmodal-win { width:760px; padding:36px 40px; border-radius:20px; background:#2a1013;
+    border:5px solid #D9A847; box-shadow:inset 0 0 0 2px rgba(217,168,71,.45); text-align:center; }
+  .pmodal-title { color:#D9A847; font-size:40px; font-weight:800; letter-spacing:4px; }
+  .pmodal-text { color:#FFE8AC; font-size:30px; margin:22px 0 30px; }
+  .pmodal-btns { display:flex; gap:20px; justify-content:center; }
 
   /* главный экран */
   .screen.menu { padding:0; }
@@ -490,13 +504,30 @@
   <div class="ss-actions"><button class="btn" id="ssPlay">ИГРАТЬ</button></div>
 </div>
 
-<!-- PvP. Лобби со списком игроков — шаг 4; пока соперник ищется очередью -->
+<!-- PvP: лобби. Список ведёт сервер, вызов идёт по id игрока, кодов комнат нет -->
 <div class="screen" id="pvpScreen">
   <div class="scr-top"><button class="back" data-back="menuScreen">←</button></div>
   <div class="ss-sub">ИГРОКИ ОНЛАЙН:</div>
-  <div class="ss-list"><div class="empty">Пусто</div></div>
-  <div class="ss-actions"><button class="btn" id="pvpFind">НАЙТИ СОПЕРНИКА</button></div>
+  <div class="ss-list" id="pvpList"><div class="empty">Пусто</div></div>
   <div class="pvp-status" id="pvpStatus"></div>
+</div>
+
+<!-- PvP: выбор колоды после согласия на бой -->
+<div class="screen" id="pvpDeckScreen">
+  <div class="scr-top"><button class="back" data-back="pvpScreen">←</button></div>
+  <div class="ss-sub">КОЛОДЫ:</div>
+  <div class="ss-list" id="pvpDeckList"></div>
+  <div class="ss-actions"><button class="btn" id="pvpPlay">ИГРАТЬ</button></div>
+  <div class="pvp-status" id="pvpDeckStatus"></div>
+</div>
+
+<!-- окно запроса на бой и ожидания соперника -->
+<div class="pmodal" id="pmodal">
+  <div class="pmodal-win">
+    <div class="pmodal-title" id="pmTitle"></div>
+    <div class="pmodal-text" id="pmText"></div>
+    <div class="pmodal-btns" id="pmBtns"></div>
+  </div>
 </div>
 
 <!-- экран колод: список, редактирование, сканирование -->
@@ -1214,7 +1245,7 @@ let chosenFoe = -1;    // колода соперника (для отладки
    главный → PvE выбор колоды → бой; главный → PvP лобби (мультиплеер выключен);
    главный → экран колод → редактор / сканирование; главный → профиль. */
 const deckEditor = $('deckEditor');
-const SCREENS = ['menuScreen', 'pveScreen', 'pvpScreen', 'decksScreen',
+const SCREENS = ['menuScreen', 'pveScreen', 'pvpScreen', 'pvpDeckScreen', 'decksScreen',
                  'deckEditor', 'scanScreen', 'profileScreen'];
 // null — спрятать всё и показать бой
 function showScreen(el) {

@@ -1,14 +1,14 @@
 'use strict';
 /*
-  Сервер игры. Отдаёт статику и держит два разных PvP:
+  Сервер игры: статика + HTTP поверх лобби и сервера матчей.
 
-  1. /api/match/*  — НОВЫЙ, правильный: бой считается здесь, в matches.js.
-     Клиент присылает только намерения, сервер их проверяет (PROJECT.md, раздел 14).
-
-  2. /api/create, /api/join, /api/push, /api/act, /api/poll — СТАРЫЙ релей
-     «поиграть с другом по коду»: сервер правил не знает, бой считает браузер
-     хоста, значит хост доверенный. Сейчас к нему никто не подключён —
-     proto/net.js отключён в index.html. Оставлен до переезда на новый путь.
+  1. /api/lobby, /api/invite, /api/answer, /api/ready, /api/leave — лобби.js:
+     присутствие, вызовы по id, согласование колод.
+  2. /api/match/* — matches.js: бой считается здесь, каждое действие проверяется
+     (PROJECT.md, раздел 14).
+  3. /api/create, /api/join, /api/push, /api/act, /api/poll — СТАРЫЙ релей
+     «по коду комнаты»: правил не знает, бой считал браузер хоста. Никем больше
+     не используется, оставлен до отдельной уборки.
 
   Запуск: node relay.js   (порт 3000 или process.env.PORT — как на Railway)
 */
@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const M = require('./matches.js');
+const L = require('./lobby.js');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 3000;
@@ -102,16 +103,27 @@ const api = {
   },
 };
 
-/* ---------- НОВЫЙ путь: сервер матчей ----------
+/* ---------- лобби ----------
+   Присутствие держится опросом /api/lobby, он же приносит вызовы, пару
+   и готовый бой. Кодов комнат нет: вызывают по id из списка. */
+const lobbyApi = {
+  lobby(body) {
+    const h = L.hello(body.playerId, body.name);
+    if (h.err) return h;
+    return L.snapshot(String(body.playerId));
+  },
+  invite(body) { return L.invite(String(body.playerId), String(body.to)); },
+  answer(body) { return L.answer(String(body.playerId), !!body.ok); },
+  ready(body)  { return L.ready(String(body.playerId), String(body.pairId), body.deck); },
+  leave(body)  { return L.leave(String(body.playerId)); },
+};
+
+/* ---------- сервер матчей ----------
    Сторона определяется по токену, выданному при создании боя. playerId,
    присланный клиентом, сам по себе не принимается: подделать его нельзя.
-
-   ВРЕМЕННО: бой создаёт кто угодно и колоды приходят от клиента. Так и задумано
-   на этом шаге — лобби (шаг 4) и колоды на сервере (шаг 5) ещё не сделаны. */
-const waiting = new Map();   // кто стоит в очереди: playerId → {id, name, deck, at}
-const pairs = new Map();     // кому уже нашли бой: playerId → {matchId, token}
-
+   Колоды пока приходят от клиента — серверное хранилище это шаг 5. */
 const matchApi = {
+  // создать бой напрямую, минуя лобби; используется тестами
   // создать бой; в ответ два токена — по одному каждой стороне
   'match/new'(body) {
     const a = body.a, b = body.b;
@@ -123,36 +135,6 @@ const matchApi = {
       body.deckA, body.deckB, body.seed);
     if (err) return { err };
     return { matchId: match.id, tokens: { a: match.tokens[0], b: match.tokens[1] } };
-  },
-
-  /* ВРЕМЕННО, до лобби (шаг 4): очередь на соперника.
-     Первый вставший ждёт, второй запускает бой. Никакого подбора здесь нет
-     и не задумано — лобби со списком игроков заменит это целиком. */
-  'match/queue'(body) {
-    const id = String(body.playerId || '').trim();
-    if (!id) return { err: 'нужен игрок' };
-    const bad = M.validateDeck(body.deck);
-    if (bad) return { err: bad };
-    const me = { id, name: String(body.name || id), deck: body.deck, at: now() };
-
-    // уже дождался — отдаём бой и убираем метку
-    const ready = pairs.get(id);
-    if (ready) { pairs.delete(id); return ready; }
-
-    // отсеиваем протухших и себя же
-    for (const [k, v] of waiting) if (now() - v.at > 60000 || k === id) waiting.delete(k);
-
-    const other = waiting.values().next().value;
-    if (!other) { waiting.set(id, me); return { waiting: true }; }
-    waiting.delete(other.id);
-
-    const { match, err } = M.createMatch(
-      { id: other.id, name: other.name }, { id: me.id, name: me.name },
-      other.deck, me.deck);
-    if (err) return { err };
-    // тому, кто ждал, результат заберут следующим опросом
-    pairs.set(other.id, { matchId: match.id, token: match.tokens[0] });
-    return { matchId: match.id, token: match.tokens[1] };
   },
 
   // текущее состояние глазами игрока: туман войны уже наложен
@@ -174,7 +156,7 @@ const matchApi = {
   },
 };
 
-setInterval(() => M.sweep(), 60 * 1000).unref();
+setInterval(() => { M.sweep(); L.sweep(); }, 30 * 1000).unref();
 
 /** Опрос — один на обе стороны; что вернуть, зависит от роли. */
 function poll(q) {
@@ -271,7 +253,7 @@ const server = http.createServer(async (req, res) => {
 
   const name = url.pathname.startsWith('/api/') ? url.pathname.slice(5) : null;
   if (name) {
-    const handler = matchApi[name] || api[name];
+    const handler = lobbyApi[name] || matchApi[name] || api[name];
     if (req.method !== 'POST' || !handler) { sendJson(res, { err: 'неизвестный запрос' }); return; }
     try {
       sendJson(res, await handler(await readBody(req)));
