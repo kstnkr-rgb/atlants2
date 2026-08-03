@@ -341,8 +341,10 @@
     min-height:34px; margin-top:14px; }
   .pvp-status.bad { color:#e07a63; }
   /* строка игрока в лобби: аватар, имя со статусом, кнопка вызова — как в макете.
-     Своя строка помечена и без кнопки (по отдельной просьбе заказчика). */
-  .ss-item.self { border-color:rgba(217,168,71,.5); background:rgba(217,168,71,.10); }
+     Своя строка помечена и без кнопки (по отдельной просьбе заказчика).
+     Оформление своей строки задано выше вместе с .ss-item.sel — бордовый градиент,
+     как подсвеченная строка «Вы» в лидерборде старой игры. Здесь его перекрывать
+     нельзя: правило ниже с той же специфичностью гасило градиент бледной заливкой. */
   .ss-item .ss-you { font-size:22px; color:#D9A847; letter-spacing:2px; }
   .ss-item .ss-busy { font-size:22px; color:#8b7f6d; }
   #stage .lb-av { position:static; flex:0 0 auto; width:72px; height:72px; border-radius:50%;
@@ -381,15 +383,22 @@
   /* габарит группы в макете начинается на 41 px выше, но эти пиксели пустые;
      картинка выгружена по видимой части, поэтому ставим её от нуля */
   #stage .menu-logo { left:853px; top:0; width:934px; height:auto; }
-  .menu-btns { position:absolute; left:820px; top:966px; width:1000px;
-    display:flex; flex-direction:column; gap:30px; }
+  .menu-btns { position:absolute; left:820px; top:900px; width:1000px;
+    display:flex; flex-direction:column; gap:16.56px; }
   /* три пункта меню одинаковые — по отдельной просьбе заказчика.
-     В макете у «КОЛОДА» осталась подсветка от первой версии, здесь её нет. */
-  .menu-btn { height:150px; padding:0; font-size:54px; font-weight:600; letter-spacing:2px; }
+     В макете у «КОЛОДА» осталась подсветка от первой версии, здесь её нет.
+     Высота 184.44 — это пропорция компонента плашки 216:40 при ширине 996
+     (996 x 40 / 216). Плашки не растягиваются, а масштабируются целиком,
+     поэтому высота задаётся шириной, а не наоборот. Шаг между пунктами 201.
+     Сдвиг на 4 px слева повторяет макет. */
+  .menu-btn { height:184.44px; width:996px; margin-left:4px; padding:0;
+    font-size:54px; font-weight:600; letter-spacing:3.24px; }
   .menu-btn:active { background:linear-gradient(90deg, rgba(81,42,30,.85), rgb(115,37,31)); }
-  .avatar-btn { position:absolute; left:2283px; top:40px; width:230px; height:230px; padding:0;
-    border:none; background:none; cursor:pointer; }
-  #stage .avatar-btn img { position:static; width:100%; height:100%; display:block; }
+  /* профиль — та же плашка, что у прочих кнопок: оформление даёт .btn.ghost,
+     здесь только место, размер и доля глифа внутри (в макете 138 из 230). */
+  .avatar-btn { position:absolute; left:2261px; top:47px; width:230px; height:230px; padding:0;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  #stage .avatar-btn img { position:static; width:60%; height:60%; display:block; }
 
   /* сканирование карты */
   .screen.scan { background-image:url("img/scan_bg.png"); }
@@ -567,7 +576,7 @@
     <button class="btn ghost menu-btn" id="mmPvp">PvP</button>
     <button class="btn ghost menu-btn" id="mmPve">PvE</button>
   </div>
-  <button class="avatar-btn" id="mmProfile" title="Профиль"><img src="img/icon_profile.png" alt=""></button>
+  <button class="btn ghost avatar-btn" id="mmProfile" title="Профиль"><img src="img/icon_profile.svg" alt=""></button>
 </div>
 
 <!-- PvE: выбор колоды перед боем с ботом -->
