@@ -189,7 +189,7 @@ function onLobby(s) {
 /* ---------- выбор колоды перед PvP ---------- */
 function renderPvpDecks() {
   $('pvpDeckList').innerHTML = decks.map((d, i) => `<div class="ss-item">
-      <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
+      <span class="ss-name">${d.name}</span>
       <span class="ss-info">${d.cards.length} карт</span>
       <span class="pick-cell">
         <button class="pick-side${chosenMe === i ? ' on' : ''}" data-side="me" data-pick="${i}">выбрать</button>

@@ -328,9 +328,13 @@
     margin-top:34px; }
 
   /* ---------- экраны меню: фон ----------
-     Полосы сверху нет ни на одном экране: осталась только кнопка «назад». */
-  .screen { background:#0a0d10 url("img/menu_bg.png") center/cover no-repeat; }
-  .screen::before { content:""; position:absolute; inset:0; background:rgba(10,6,7,.72); }
+     Полосы сверху нет ни на одном экране: осталась только кнопка «назад».
+     Фон — ровная заливка из макета, одна на все экраны меню. Фотографии
+     и затемнения поверх неё больше нет, поэтому menu_bg.png не используется
+     (файл оставлен в репозитории). Главный экран и сканирование — со своими
+     картинками, они заданы ниже. */
+  .screen { background:#3C2B2D; }
+  .screen::before { content:none; }
   .screen > * { position:relative; }
   /* на экранах с кнопкой «назад» контент начинается ниже неё */
   .screen:has(> .back) { padding-top:176px; }
@@ -357,6 +361,10 @@
   /* «изменить» на экране колод — квадратная кнопка с карандашом, как в макете */
   .ed-pencil { width:64px; height:64px; padding:0; font-size:28px; line-height:1;
     display:inline-flex; align-items:center; justify-content:center; }
+  /* выбор колоды для боя — кружок, как в макете: тонкое кольцо, залитое у выбранной */
+  .pick-radio { width:56px; height:56px; flex:0 0 auto; padding:0; border-radius:50%;
+    border:3px solid #D9A847; background:none; cursor:pointer; }
+  .pick-radio.on { background:#D9A847; }
 
   /* окно запроса на бой и ожидания — оформление как у окон старой игры */
   .pmodal { position:absolute; inset:0; z-index:1400; background:rgba(6,4,4,.72);
@@ -400,9 +408,10 @@
     cursor:pointer; display:flex; align-items:center; justify-content:center; }
   #stage .avatar-btn img { position:static; width:60%; height:60%; display:block; }
 
-  /* сканирование карты */
-  .screen.scan { background-image:url("img/scan_bg.png"); }
-  .screen.scan::before { background:rgba(10,6,7,.58); }
+  /* сканирование карты — свой фон-фотография с затемнением: общее затемнение
+     экранов отключено, поэтому и картинка, и слой поверх заданы здесь целиком */
+  .screen.scan { background:#0a0d10 url("img/scan_bg.png") center/cover no-repeat; }
+  .screen.scan::before { content:""; position:absolute; inset:0; background:rgba(10,6,7,.58); }
   .scan-hint { flex:0 0 auto; text-align:center; color:#FFE8AC; font-size:30px; font-weight:700;
     letter-spacing:3px; }
   .viewfinder { flex:0 0 auto; position:relative; width:300px; height:430px; margin:30px auto;
@@ -461,8 +470,6 @@
   .mini.maxed { filter:grayscale(.6) brightness(.6); }
   .mini-count { position:absolute; right:6px; bottom:6px; background:#231803; color:#D9A847;
     font-size:22px; font-weight:700; border-radius:10px; padding:2px 10px; }
-  .ss-badge { font-size:20px; font-weight:700; color:#231803; background:#5db07a;
-    border-radius:10px; padding:3px 12px; margin-left:14px; }
   .slot { width:235px; height:334px; border:4px dashed rgba(255,255,255,.22);
     border-radius:14px; display:flex; align-items:center; justify-content:center;
     font-size:34px; color:rgba(255,255,255,.25); }
@@ -572,9 +579,9 @@
   <div class="menu-veil"></div>
   <img class="menu-logo" src="img/logo.png" alt="Атланты: Дуэли богов">
   <div class="menu-btns">
+    <button class="btn ghost menu-btn" id="mmFight">СРАЗИТЬСЯ</button>
     <button class="btn ghost menu-btn" id="mmDecks">КОЛОДА</button>
-    <button class="btn ghost menu-btn" id="mmPvp">PvP</button>
-    <button class="btn ghost menu-btn" id="mmPve">PvE</button>
+    <button class="btn ghost menu-btn" id="mmPvp">ИГРА С ДРУГОМ</button>
   </div>
   <button class="btn ghost avatar-btn" id="mmProfile" title="Профиль"><img src="img/icon_profile.svg" alt=""></button>
 </div>
@@ -1324,8 +1331,27 @@ if (!lsGet(SEED_KEY)) {
   lsSet(SEED_KEY, '1');
   storeDecks();
 }
-let chosenMe = -1;     // -1 — случайная колода
-let chosenFoe = -1;    // колода соперника (для отладки можно задать точно)
+// Колода игрока выбирается на экране колод и запоминается между заходами.
+// Храним по имени, а не по номеру: номера едут при создании и удалении колод.
+const CHOSEN_KEY = 'atlanteans_chosen_deck';
+const starterIndex = () => {
+  const i = decks.findIndex(d => d.starter);
+  return i >= 0 ? i : (decks.length ? 0 : -1);
+};
+function loadChosen() {
+  const name = lsGet(CHOSEN_KEY);
+  if (name) {
+    const i = decks.findIndex(d => d.name === name);
+    if (i >= 0) return i;
+  }
+  return starterIndex();          // по умолчанию играем стартовой
+}
+function setChosen(i) {
+  chosenMe = i;
+  if (decks[i]) lsSet(CHOSEN_KEY, decks[i].name);
+}
+let chosenMe = loadChosen();
+let chosenFoe = -1;    // соперник берёт случайную колоду; -1 — «наугад»
 
 /* ---------- экраны и переходы ----------
    Состав и связи — из схемы в Figma (лист «схема»):
@@ -1353,7 +1379,12 @@ document.addEventListener('click', e => {
   if (b) goto(b.dataset.back);
 });
 
-$('mmPve').onclick = () => goto('pveScreen');
+// «Сразиться» ведёт сразу в бой с ботом: колоду игрок выбирает на экране колод,
+// по умолчанию стартовая. Соперник берёт случайную колоду (chosenFoe = -1).
+$('mmFight').onclick = () => {
+  showScreen(null);
+  newGame(deckAt(chosenMe), deckAt(chosenFoe));
+};
 $('mmPvp').onclick = () => goto('pvpScreen');
 $('mmDecks').onclick = () => goto('decksScreen');
 $('mmProfile').onclick = () => goto('profileScreen');
@@ -1371,7 +1402,7 @@ function renderStart() {
       <span class="ss-info">${DECK_SIZE} карт наугад</span>
       ${pickBtns(-1)}</div>`];
   decks.forEach((d, i) => rows.push(`<div class="ss-item">
-      <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
+      <span class="ss-name">${d.name}</span>
       <span class="ss-info">${d.cards.length} карт</span>
       ${pickBtns(i)}
     </div>`));
@@ -1391,23 +1422,28 @@ $('ssPlay').onclick = () => {
 };
 
 /* ---------- экран колод ---------- */
+// Здесь же выбирается колода, которой игрок пойдёт в бой: кружок-радиокнопка
+// как в макете, выбранная строка подсвечивается плашкой «нажатая».
 function renderDecks() {
-  $('dkList').innerHTML = decks.map((d, i) => `<div class="ss-item">
-      <span class="ss-name">${d.name}</span>${d.starter ? '<span class="ss-badge">СТАРТ</span>' : ''}
+  $('dkList').innerHTML = decks.map((d, i) => `<div class="ss-item${chosenMe === i ? ' sel' : ''}">
+      <span class="ss-name">${d.name}</span>
       <span class="ss-info">${d.cards.length} карт</span>
       <span class="pick-cell">
+        <button class="pick-radio${chosenMe === i ? ' on' : ''}" data-pick="${i}" title="играть этой колодой"></button>
         <button class="btn ghost ed-pencil" data-edit="${i}" title="изменить">✎</button>
         ${d.starter ? '' : `<button class="btn ghost ed-pencil" data-del="${i}" title="удалить">✕</button>`}
       </span>
     </div>`).join('');
 }
 $('dkList').addEventListener('click', e => {
+  const pick = e.target.closest('[data-pick]');
+  if (pick) { setChosen(+pick.dataset.pick); renderDecks(); return; }
   const del = e.target.closest('[data-del]');
   if (del) {
     const i = +del.dataset.del;
     if (NET.online) { NET.delDeck(decks[i].id); return; }
     decks.splice(i, 1); storeDecks();
-    if (chosenMe >= decks.length) chosenMe = -1;
+    chosenMe = loadChosen();   // выбранная могла уехать номером или исчезнуть совсем
     if (chosenFoe >= decks.length) chosenFoe = -1;
     renderDecks(); return;
   }
@@ -1544,7 +1580,7 @@ $('edSave').onclick = () => {
   if (edIndex >= 0 && decks[edIndex].starter) deck.starter = true;   // стартовая остаётся стартовой
   if (edIndex >= 0) decks[edIndex] = deck; else { decks.push(deck); edIndex = decks.length - 1; }
   storeDecks();
-  chosenMe = edIndex;
+  setChosen(edIndex);   // только что сохранённой колодой и играем дальше
   goto('decksScreen');
 };
 
