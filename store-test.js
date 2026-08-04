@@ -9,7 +9,7 @@ const store = require('./store.js');
 const L = require('./lobby.js');
 const M = require('./matches.js');
 const RULES = require('./proto/rules.js');
-const { CARD_KEYS, STARTER_DECK } = require('./proto/cards.js');
+const { CARD_KEYS, STARTER_DECK, PRESETS } = require('./proto/cards.js');
 
 let fails = 0;
 const check = (n, c, e = '') => {
@@ -51,17 +51,24 @@ check('чужая сессия не узнаётся', A.whoIs('нет тако�
 
 /* ---------- коллекция и колоды ---------- */
 const P = 'kd-100';
+// новичок получает стартовую колоду и готовые колоды заказчика
+const START_DECKS = 1 + PRESETS.length;
 const l0 = store.listDecks(P);
-check('у нового игрока есть стартовая колода', l0.decks.length === 1 && l0.decks[0].starter);
+check('у нового игрока есть стартовая колода', l0.decks[0].starter);
 check('стартовая колода того же состава', l0.decks[0].cards.join() === STARTER_DECK.join());
+check('готовые колоды выданы вместе со стартовой', l0.decks.length === START_DECKS,
+  'колод: ' + l0.decks.length + ', ждали ' + START_DECKS);
+check('готовые колоды те самые',
+  PRESETS.every(pr => l0.decks.some(d => d.name === pr.name && d.cards.join() === pr.cards.join())));
+check('готовые колоды не помечены стартовой', l0.decks.filter(d => d.starter).length === 1);
 check('коллекция не пуста', Object.keys(l0.collection).length > 0);
 
 const saved = store.saveDeck(P, { name: 'Моя', cards: deck() });
 check('колода сохранена', !!saved.deck && !!saved.deck.id, JSON.stringify(saved));
-check('колод стало две', store.listDecks(P).decks.length === 2);
+check('своя колода добавилась к выданным', store.listDecks(P).decks.length === START_DECKS + 1);
 
 const again = store.saveDeck(P, { id: saved.deck.id, name: 'Переименована', cards: deck() });
-check('колода перезаписана, а не добавлена', store.listDecks(P).decks.length === 2);
+check('колода перезаписана, а не добавлена', store.listDecks(P).decks.length === START_DECKS + 1);
 check('имя обновилось', again.deck.name === 'Переименована', again.deck && again.deck.name);
 
 check('колода не на 20 карт отклонена', !!store.saveDeck(P, { name: 'x', cards: deck().slice(0, 19) }).err);
@@ -86,7 +93,7 @@ check('собрать такую же руками нельзя',
   !!store.saveDeck(P, { name: 'x', cards: STARTER_DECK.slice() }).err);
 check('стартовую колоду удалить нельзя', !!store.delDeck(P, 'starter').err);
 check('свою колоду удалить можно', !!store.delDeck(P, saved.deck.id).ok);
-check('удалённой колоды нет', store.listDecks(P).decks.length === 1);
+check('удалённой колоды нет', store.listDecks(P).decks.length === START_DECKS);
 check('состав удалённой колоды не выдаётся', store.deckCards(P, saved.deck.id) === null);
 
 /* ---------- в бой уходит серверная колода ---------- */

@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const RULES = require('./proto/rules.js');
-const { CARDS, CARD_KEYS, STARTER_DECK } = require('./proto/cards.js');
+const { CARDS, CARD_KEYS, STARTER_DECK, PRESETS } = require('./proto/cards.js');
 
 const FILE = path.join(__dirname, 'data', 'players.json');
 const MAX_DECKS = 20;
@@ -59,6 +59,22 @@ function startCollection() {
   return col;
 }
 
+/* Готовые колоды заказчика выдаёт сервер, а не браузер.
+   Раньше они жили только в localStorage, и в онлайне список подменялся
+   серверным, где их нет, — у игрока оставалась одна стартовая. Версия нужна,
+   чтобы при смене составов колоды доехали и до тех, кто уже играл. */
+const PRESETS_VERSION = 1;
+function seedPresets(p) {
+  if (p.presets === PRESETS_VERSION) return;
+  for (const pr of PRESETS) {
+    if (p.decks.some(d => d.name === pr.name)) continue;   // свою одноимённую не трогаем
+    if (p.decks.length >= MAX_DECKS) break;
+    p.decks.push({ id: crypto.randomBytes(6).toString('hex'), name: pr.name, cards: pr.cards.slice() });
+  }
+  p.presets = PRESETS_VERSION;
+  dirty = true;
+}
+
 function getPlayer(id) {
   id = String(id);
   let p = players[id];
@@ -70,6 +86,7 @@ function getPlayer(id) {
     };
     dirty = true;
   }
+  seedPresets(p);
   return p;
 }
 
