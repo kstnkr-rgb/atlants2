@@ -177,7 +177,7 @@ const matchApi = {
     if (!m) return { err: 'бой не найден' };
     const side = M.playerByToken(m, body.token);
     if (!side) return { err: 'нет доступа' };
-    return M.viewFor(m, side, body.logFrom);
+    return M.viewFor(m, side, body.logFrom, body.fxFrom);
   },
 
   // намерение игрока: сыграть карту, взять новую, закончить ход, сдаться

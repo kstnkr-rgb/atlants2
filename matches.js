@@ -16,6 +16,7 @@ const TURN_MS   = 90 * 1000;        // столько даётся на ход
 const MISS_LIMIT = 3;               // столько пропущенных ходов подряд — техническое поражение
 const MATCH_TTL = 2 * 60 * 60 * 1000;
 const LOG_MAX   = 300;
+const FX_MAX    = 200;              // событий показа держим столько же по смыслу, что и лога
 
 const matches = new Map();
 const now = () => Date.now();
@@ -46,6 +47,15 @@ function validateDeck(cards) {
 
 /* ---------- матч ---------- */
 
+/* Событие показа кладём в очередь со сквозным номером: клиент присылает,
+   до какого номера уже проиграл, и получает только то, чего ещё не видел.
+   Хвост обрезаем, чтобы очередь не росла бесконечно за долгий бой. */
+function pushFx(m, e) {
+  e.n = m.fxNext++;
+  m.fxq.push(e);
+  if (m.fxq.length > FX_MAX) m.fxq.splice(0, m.fxq.length - FX_MAX);
+}
+
 function createMatch(a, b, deckA, deckB, seedIn) {
   const bad = validateDeck(deckA) || validateDeck(deckB);
   if (bad) return { err: bad };
@@ -60,6 +70,8 @@ function createMatch(a, b, deckA, deckB, seedIn) {
     rnd: seeded(seed),
     players: [a, b],                  // {id, name}
     log: [],
+    fxq: [],                          // события показа: цифры урона и тряска, см. ниже
+    fxNext: 0,                        // сквозной номер события; по нему клиент берёт только новые
     moves: [],                        // все применённые действия — для разбора и переигрывания
     seq: [0, 0],                      // последний применённый номер действия каждой стороны
     missed: [0, 0],                   // пропущено ходов подряд
@@ -69,7 +81,12 @@ function createMatch(a, b, deckA, deckB, seedIn) {
     born: now(),
     queue: Promise.resolve(),         // действия применяются строго по одному
   };
-  // бой считается молча; новые карты обоим кладём над рукой — оба игрока люди
+  /* Бой считается мгновенно: sleep и render остаются заглушками из SILENT,
+     сервер не ждёт и ничего не рисует. А popup и shake не выбрасываем —
+     складываем в очередь событий и отдаём обоим клиентам, чтобы бой с другом
+     показывал цифры урона и тряску так же, как бой с ботом. Стороны здесь
+     абсолютные (0 и 1), в свой «мне/врагу» их переводит viewFor.
+     Новые карты обоим кладём над рукой — оба игрока люди. */
   m.fx = Object.assign({}, RULES.SILENT, {
     rnd: m.rnd,
     toPending: () => true,
@@ -77,6 +94,8 @@ function createMatch(a, b, deckA, deckB, seedIn) {
       m.log.push({ n: m.log.length, text, cls: cls || '' });
       if (m.log.length > LOG_MAX) m.log.splice(0, m.log.length - LOG_MAX);
     },
+    popup(side, text, kind) { pushFx(m, { t: 'popup', side, text: String(text), kind: kind || '' }); },
+    shake(side) { pushFx(m, { t: 'shake', side }); },
   });
 
   m.S = RULES.newState(deckA, deckB, m.fx);
@@ -127,12 +146,13 @@ function sweep() {
 /* ---------- вид состояния ----------
    Туман войны делает rules.viewFor: про себя всё, про соперника только числа
    и размеры стопок. Здесь добавляется то, что знает не бой, а матч. */
-function viewFor(m, playerId, logFrom) {
+function viewFor(m, playerId, logFrom, fxFrom) {
   const who = sideOf(m, playerId);
   if (who < 0) return { err: 'вы не в этом бою' };
   tick(m);
   m.seen[who] = now();
   const from = Math.max(0, +logFrom || 0);
+  const fxAt = Math.max(0, +fxFrom || 0);
   return {
     matchId: m.id,
     rev: m.rev,
@@ -147,6 +167,10 @@ function viewFor(m, playerId, logFrom) {
     // строки лога, которых у клиента ещё нет
     log: m.log.filter(l => l.n >= from),
     logNext: m.log.length ? m.log[m.log.length - 1].n + 1 : 0,
+    // события показа, которых клиент ещё не проигрывал; сторона переведена
+    // в его систему координат: 0 — он сам, 1 — соперник
+    fx: m.fxq.filter(e => e.n >= fxAt).map(e => ({ ...e, side: e.side === who ? 0 : 1 })),
+    fxNext: m.fxq.length ? m.fxq[m.fxq.length - 1].n + 1 : 0,
   };
 }
 

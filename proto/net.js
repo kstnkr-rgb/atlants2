@@ -43,6 +43,7 @@ let phase = 'off';        // 'off' | 'lobby' | 'pair' | 'battle'
 let timer = null, inFlight = false;
 let pairId = null, matchId = null, token = null;
 let seq = 0, logFrom = 0, lastPlayN = 0, counted = false, entered = false;
+let fxFrom = 0;                       // до какого номера события показа уже проиграны
 let askedFrom = null;     // чей запрос сейчас показан в окне
 let session = null;       // токен сессии: им подписан каждый запрос
 
@@ -237,7 +238,7 @@ function enterBattle(m) {
   if (phase === 'battle') return;
   phase = 'battle';
   matchId = m.matchId; token = m.token;
-  seq = 0; logFrom = 0; lastPlayN = 0; counted = false; entered = false;
+  seq = 0; logFrom = 0; lastPlayN = 0; counted = false; entered = false; fxFrom = 0;
   NET.mode = 'net';
   NET.send = send;
   hideModal();
@@ -251,10 +252,36 @@ async function showCenter(lp) {
   await hidePlayed();
 }
 
+/* ---------- показ эффектов боя ----------
+   Сервер считает ход мгновенно и присылает готовый список событий: цифры
+   урона, блока, баффов и тряску бойца. Проигрываем их по очереди с паузой,
+   иначе всё всплывёт одним кадром. Очередь одна на весь бой, чтобы соседние
+   опросы не наложились друг на друга. Тряска, идущая сразу за цифрой,
+   показывается вместе с ней — как в бою с ботом. */
+let fxChain = Promise.resolve();
+const FX_GAP = 260;
+
+function playFx(list) {
+  if (!list || !list.length) return;
+  fxChain = fxChain.then(async () => {
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (e.t === 'shake') { hitShake(e.side); continue; }
+      if (e.t !== 'popup') continue;
+      popup(e.side, e.text, e.kind);
+      while (i + 1 < list.length && list[i + 1].t === 'shake') hitShake(list[++i].side);
+      await sleep(FX_GAP);
+    }
+  }).catch(() => {});
+}
+
 function applyView(v) {
+  const first = !entered;
   if (!entered) { entered = true; showScreen(null); }
   S = toState(v);
   if (v.log && v.log.length) { for (const l of v.log) logMsg(l.text, l.cls); logFrom = v.logNext; }
+  // при входе в бой очередь только принимаем: переигрывать чужие ходы задним числом незачем
+  if (v.fx && v.fx.length) { if (!first) playFx(v.fx); fxFrom = v.fxNext; }
   render();
   $('roomCode').textContent = v.over ? '' : `ХОД: ${v.left} с`;
   if (v.over) {
@@ -279,7 +306,7 @@ async function tick() {
   if (phase === 'battle') {
     // пока карту тянут пальцем, состояние не подменяем — иначе жест оборвётся
     if (document.querySelector('.card.dragging')) return;
-    const v = await call('match/state', { matchId, token, logFrom });
+    const v = await call('match/state', { matchId, token, logFrom, fxFrom });
     if (v.err) { stopBattle(); return; }
     applyView(v);
     return;

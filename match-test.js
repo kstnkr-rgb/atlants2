@@ -101,6 +101,24 @@ const deck = () => {
   check('после повторов состояние не менялось', m.rev === revAfter, `${m.rev} vs ${revAfter}`);
   check('урон нанесён один раз', m.S.p[1].hp <= hpBefore);
 
+  /* ---------- события показа ----------
+     Ход сервер считает молча, но цифры урона и тряску не выбрасывает:
+     складывает в очередь и отдаёт каждому игроку в его системе сторон,
+     где 0 — он сам. Без этого бой с другом шёл бы без анимаций. */
+  const seenA = M.viewFor(m, 'p1', 0, 0);
+  const seenB = M.viewFor(m, 'p2', 0, 0);
+  check('события показа появились', seenA.fx.length > 0, 'событий: ' + seenA.fx.length);
+  check('среди них есть всплывающая надпись',
+    seenA.fx.some(e => e.t === 'popup' && e.text.length > 0));
+  check('обоим пришло поровну', seenA.fx.length === seenB.fx.length,
+    `${seenA.fx.length} vs ${seenB.fx.length}`);
+  check('сторона всегда своя или чужая', seenA.fx.every(e => e.side === 0 || e.side === 1));
+  check('одно событие видно игрокам зеркально',
+    seenA.fx.every((e, i) => e.n === seenB.fx[i].n && e.side !== seenB.fx[i].side));
+  const afterFx = M.viewFor(m, 'p1', 0, seenA.fxNext);
+  check('проигранные события повторно не приходят', afterFx.fx.length === 0,
+    'пришло: ' + afterFx.fx.length);
+
   /* ---------- смена хода ---------- */
   await M.applyAction(m, 'p1', 21, { t: 'end' });
   check('ход перешёл сопернику', m.S.cur === 1, String(m.S.cur));
