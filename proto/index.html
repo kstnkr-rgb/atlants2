@@ -443,8 +443,10 @@
   /* профиль */
   .pf { flex:1 1 auto; display:flex; flex-direction:column; align-items:center; gap:14px;
     overflow-y:auto; touch-action:pan-y; }
-  #stage .pf-av { position:relative; width:230px; height:230px; border-radius:50%;
-    object-fit:cover; border:5px solid #D9A847; flex:0 0 auto; }
+  /* аватар по умолчанию — пустой круг из макета: своей картинки у игрока ещё
+     нет, загрузка не сделана. Поэтому это не картинка, а элемент с заливкой. */
+  #stage .pf-av { position:relative; width:420px; height:420px; border-radius:50%;
+    background:#1C1313; border:6px solid #D9A847; flex:0 0 auto; }
   .pf-hint { color:#8b7f6d; font-size:22px; }
   #pfName { width:min(560px, 90%); font-size:30px; padding:14px 18px; border-radius:12px;
     border:3px solid #D9A847; background:rgba(255,255,255,.08); color:#fff; text-align:center; }
@@ -659,7 +661,7 @@
 <div class="screen" id="profileScreen">
   <button class="btn ghost back" data-back="menuScreen">←</button>
   <div class="pf">
-    <img class="pf-av" src="img/avatar.png" alt="">
+    <div class="pf-av"></div>
     <div class="pf-hint">нажмите, чтобы сменить аватар</div>
     <input id="pfName" maxlength="24" placeholder="Имя игрока">
     <div class="pf-rows" id="pfRows"></div>
